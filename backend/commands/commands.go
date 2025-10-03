@@ -1,6 +1,9 @@
 package commands
 
-import "strings"
+import (
+    "strings"
+    "fmt"
+)
 
 func ExecuteCommand(fullCommand string) string {
     tokens := splitFields(fullCommand)
@@ -45,6 +48,44 @@ func ExecuteCommand(fullCommand string) string {
         return Mkdir(args)
     case "rep":
         return Rep(args)
+    case "unmount":
+        return Unmount(args)
+    case "chown":
+        id := args["-id"]
+        path := args["-path"]
+        user := args["-user"]
+        err := Chown(id, path, user, false)
+        if err != nil {
+            return fmt.Sprintf("Error: %v", err)
+        }
+        return "Propietario cambiado correctamente"
+    case "chmod":
+        id := args["-id"]
+        path := args["-path"]
+        ugo := args["-ugo"]
+        err := Chmod(id, path, ugo, false)
+        if err != nil {
+            return fmt.Sprintf("Error: %v", err)
+        }
+        return "Permisos cambiados correctamente"
+    case "rename":
+        return Rename(args)
+    case "move":
+        return Move(args)
+    case "find":
+        return Find(args)
+    case "edit":
+        return Edit(args)
+    case "copy":
+        return Copy(args)
+    case "remove":
+        return Remove(args)
+    case "loss":
+        return Loss(args)
+    case "recovery":
+        return Recovery(args)
+    case "journaling":
+        return Journaling(args)
     default:
         return "Comando no reconocido"
     }

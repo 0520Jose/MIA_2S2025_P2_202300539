@@ -91,7 +91,7 @@ func Mkfile(params map[string]string) string {
         return "Error: " + err.Error()
     }
 
-    dirIno, err := readInode(disk, sb, padreIno)
+    dirIno, err := ReadInode(disk, sb, padreIno)
     if err != nil {
         return "Error: " + err.Error()
     }

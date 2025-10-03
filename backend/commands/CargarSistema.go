@@ -254,7 +254,7 @@ func nextFreeIndex(bm []byte) int32 {
     return -1
 }
 
-func readInode(f *os.File, sb *structs.SuperBloque, idx int32) (structs.Inodo, error) {
+func ReadInode(f *os.File, sb *structs.SuperBloque, idx int32) (structs.Inodo, error) {
     var ino structs.Inodo
     offset := int64(sb.S_inode_start) + int64(idx)*int64(sb.S_inode_s)
     if _, err := f.Seek(offset, io.SeekStart); err != nil {

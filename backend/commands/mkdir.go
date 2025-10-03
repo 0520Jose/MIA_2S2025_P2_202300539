@@ -51,12 +51,13 @@ func Mkdir(params map[string]string) string {
         return "Error: partición no montada."
     }
 
+
     padreIno, err := ensureParentDir(disk, sb, partes[:len(partes)-1], pflag)
     if err != nil {
         return "Error: " + err.Error()
     }
 
-    dirPadre, err := readInode(disk, sb, padreIno)
+    dirPadre, err := ReadInode(disk, sb, padreIno)
     if err != nil {
         return "Error: " + err.Error()
     }
@@ -65,7 +66,7 @@ func Mkdir(params map[string]string) string {
     }
 
     if childIdx, _ := findEntryInDir(disk, sb, padreIno, nombre); childIdx >= 0 {
-        child, err := readInode(disk, sb, int32(childIdx))
+        child, err := ReadInode(disk, sb, int32(childIdx))
         if err != nil {
             return "Error: " + err.Error()
         }

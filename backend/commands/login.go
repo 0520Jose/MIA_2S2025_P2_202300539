@@ -119,7 +119,7 @@ func GetCurrentUser() *UserSession {
 }
 
 func LeerArchivoUsersTXT(f *os.File, sb *structs.SuperBloque) (string, error) {
-    ino, err := readInode(f, sb, 2)
+    ino, err := ReadInode(f, sb, 2)
     if err != nil {
         return "", err
     }

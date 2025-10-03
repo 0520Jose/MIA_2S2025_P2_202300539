@@ -52,6 +52,7 @@ type EBR struct {
     Part_s     int32
     Part_next  int32
     Part_name  [16]byte
+    Part_correlative int32
 }
 
 type SuperBloque struct {
@@ -267,6 +268,7 @@ func ObtenerInodo(f *os.File, sb *SuperBloque, idx int) (Inodo, bool) {
 
 func SistemaArchivos_ID(id string) (*os.File, Partition, MBR, error) {
     var particion Partition
+    fmt.Println("Buscando sistema de archivos con ID:", id)
     var mbr MBR
 
     for _, montada := range Particiones_Montadas {
@@ -539,7 +541,7 @@ func LeerArchivoDeFS(id, rutaArchivo string) (string, error) {
     }
     defer f.Close()
 
-    ino, err := buscarInodoPorRuta(f, sb, rutaArchivo)
+    ino, err := BuscarInodoPorRuta(f, sb, rutaArchivo)
     if err != nil {
         return "", err
     }
@@ -565,7 +567,7 @@ func LeerArchivoDeFS(id, rutaArchivo string) (string, error) {
     return strings.TrimRight(contenido.String(), "\x00"), nil
 }
 
-func buscarInodoPorRuta(f *os.File, sb *SuperBloque, ruta string) (Inodo, error) {
+func BuscarInodoPorRuta(f *os.File, sb *SuperBloque, ruta string) (Inodo, error) {
     var ino Inodo
     
     if ruta == "/" {
@@ -625,6 +627,69 @@ func buscarInodoPorRuta(f *os.File, sb *SuperBloque, ruta string) (Inodo, error)
     return currentIno, nil
 }
 
+func BuscarInodoPorRuta_(f *os.File, sb *SuperBloque, ruta string) (Inodo, int32, error) {
+    var ino Inodo
+    
+    if ruta == "/" {
+        ino, ok := ObtenerInodo(f, sb, 0)
+        if !ok {
+            return ino, 0, fmt.Errorf("no se pudo obtener el inodo raíz")
+        }
+        return ino, 0, nil
+    }
+
+    parts := strings.Split(strings.Trim(ruta, "/"), "/")
+    currentIno, ok := ObtenerInodo(f, sb, 0)
+    if !ok {
+        return ino, -1, fmt.Errorf("no se pudo obtener el inodo raíz")
+    }
+    
+    currentIdx := int32(0)
+
+    for _, part := range parts {
+        if part == "" {
+            continue
+        }
+
+        foundIno := int32(-1)
+        
+        for i := 0; i < DIRECT_BLOCKS; i++ {
+            blockIdx := currentIno.I_block[i]
+            if blockIdx < 0 {
+                break
+            }
+            
+            bc, ok := LeerBloqueCarpeta(f, sb, blockIdx)
+            if ok {
+                for _, content := range bc.B_content {
+                    name := trimBytes(content.B_name[:])
+                    if name == part {
+                        foundIno = content.B_inodo
+                        break
+                    }
+                }
+            }
+            
+            if foundIno >= 0 {
+                break
+            }
+        }
+
+        if foundIno < 0 {
+            return ino, -1, fmt.Errorf("archivo o directorio %s no encontrado", part)
+        }
+
+        currentIdx = foundIno
+        var ok bool
+        currentIno, ok = ObtenerInodo(f, sb, int(foundIno))
+        if !ok {
+            return ino, -1, fmt.Errorf("no se pudo obtener el inodo %d", foundIno)
+        }
+    }
+
+    return currentIno, currentIdx, nil
+}
+
 func EscribirBloqueArchivo(f *os.File, sb *SuperBloque, blockIdx int32, ba *BArchivo) error {
     offset := int64(sb.S_block_start) + int64(blockIdx)*64
     if _, err := f.Seek(offset, io.SeekStart); err != nil {
@@ -649,7 +714,7 @@ func ListaCarpetasFS(id, rutaCarpeta string) ([]InfoArchivo, error) {
     }
     defer f.Close()
 
-    ino, err := buscarInodoPorRuta(f, sb, rutaCarpeta)
+    ino, err := BuscarInodoPorRuta(f, sb, rutaCarpeta)
     if err != nil {
         return nil, err
     }

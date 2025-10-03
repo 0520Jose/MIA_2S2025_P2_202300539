@@ -3,136 +3,166 @@ package utils
 import (
     "backend/structs"
     "encoding/binary"
+    "backend/commands"
     "fmt"
-    "io"
     "os"
     "strings"
 )
 
-type FileNode struct {
-    Name        string `json:"name"`
-    Type        string `json:"type"` // "file" o "folder"
-    Size        int32  `json:"size"`
-    Permissions string `json:"permissions"`
-    Owner       string `json:"owner"`
-    Group       string `json:"group"`
-    Created     string `json:"created"`
-    Modified    string `json:"modified"`
-}
-
-type PartitionFiles struct {
-    PartitionName string     `json:"partition"`
-    Files         []FileNode `json:"files"`
-}
-
-// Lista archivos/carpetas de todas las particiones (primarias y lógicas) del disco
-func ListFiles(diskPath, internalPath string) ([]PartitionFiles, error) {
-    mbr, err := structs.LeerMBR(diskPath)
-    if err != nil {
-        return nil, fmt.Errorf("no se pudo leer el MBR: %v", err)
-    }
-
-    var results []PartitionFiles
-
-    // Recorre todas las particiones primarias y extendidas
-    for _, part := range mbr.Mbr_partitions {
-        name := strings.Trim(string(part.Part_name[:]), "\x00")
-        if part.Part_s <= 0 || name == "" {
-            continue
-        }
-        // Intenta listar archivos en la partición primaria (si tiene FS)
-        files, err := listFilesFromPartition(diskPath, part.Part_start, name, internalPath)
-        if err == nil && len(files) > 0 {
-            results = append(results, PartitionFiles{
-                PartitionName: name,
-                Files:         files,
-            })
-        }
-        // Si es extendida, busca lógicas
-        if part.Part_type == 'e' || part.Part_type == 'E' {
-            ebrPos := int64(part.Part_start)
-            for {
-                f, err := os.Open(diskPath)
-                if err != nil {
-                    break
-                }
-                var ebr structs.EBR
-                if _, err := f.Seek(ebrPos, 0); err != nil {
-                    f.Close()
-                    break
-                }
-                if err := binary.Read(f, binary.LittleEndian, &ebr); err != nil {
-                    f.Close()
-                    break
-                }
-                f.Close()
-                lname := strings.Trim(string(ebr.Part_name[:]), "\x00")
-                if ebr.Part_s > 0 && lname != "" {
-                    files, err := listFilesFromPartition(diskPath, ebr.Part_start, lname, internalPath)
-                    if err == nil && len(files) > 0 {
-                        results = append(results, PartitionFiles{
-                            PartitionName: lname,
-                            Files:         files,
-                        })
-                    }
-                }
-                if ebr.Part_next <= 0 {
-                    break
-                }
-                ebrPos = int64(ebr.Part_next)
-            }
-        }
-    }
-    return results, nil
-}
-
-// Usa tus propias funciones y structs, solo cambia el punto de entrada
-func listFilesFromPartition(diskPath string, partStart int32, partitionName, internalPath string) ([]FileNode, error) {
-    // Lee el superbloque de la partición
+func ListFilesFromDisk(diskPath, partitionName, ruta string) ([]structs.InfoArchivo, error) {
     f, err := os.Open(diskPath)
     if err != nil {
-        return nil, err
+        return nil, fmt.Errorf("no se pudo abrir el disco: %v", err)
     }
     defer f.Close()
-    sb := &structs.SuperBloque{}
-    if _, err := f.Seek(int64(partStart), io.SeekStart); err != nil {
-        return nil, err
-    }
-    if err := binary.Read(f, binary.LittleEndian, sb); err != nil {
-        return nil, err
+
+    // Leer MBR
+    var mbr structs.MBR
+    if err := binary.Read(f, binary.LittleEndian, &mbr); err != nil {
+        return nil, fmt.Errorf("error leyendo MBR: %v", err)
     }
 
-    // Crea un mount temporal solo para usar ListaCarpetasFS
-    tempMount := structs.PartitionMount{
-        Id:        "TEMP_" + partitionName,
-        Path:      diskPath,
-        Partition: structs.Partition{Part_start: partStart, Part_name: [16]byte{}},
-    }
-    copy(tempMount.Partition.Part_name[:], []byte(partitionName))
-    structs.Particiones_Montadas = append(structs.Particiones_Montadas, tempMount)
-    filesInfo, err := structs.ListaCarpetasFS(tempMount.Id, internalPath)
-    // Limpia el mount temporal
-    structs.Particiones_Montadas = structs.Particiones_Montadas[:len(structs.Particiones_Montadas)-1]
-    if err != nil {
-        return nil, err
-    }
-
-    var files []FileNode
-    for _, a := range filesInfo {
-        tipo := "file"
-        if a.Tipo == "d" {
-            tipo = "folder"
+    // Buscar partición
+    var start int32 = -1
+    for _, part := range mbr.Mbr_partitions {
+        name := strings.TrimRight(string(part.Part_name[:]), "\x00")
+        if name == partitionName {
+            start = part.Part_start
+            break
         }
-        files = append(files, FileNode{
-            Name:        a.Nombre,
-            Type:        tipo,
-            Size:        a.Size,
-            Permissions: a.Permisos,
-            Owner:       a.Propietario,
-            Group:       a.Grupo,
-            Created:     a.Creacion,
-            Modified:    a.Modificacion,
-        })
     }
-    return files, nil
+    if start < 0 {
+        return nil, fmt.Errorf("partición %s no encontrada", partitionName)
+    }
+
+    // Leer superbloque
+    if _, err := f.Seek(int64(start), 0); err != nil {
+        return nil, fmt.Errorf("error buscando superbloque: %v", err)
+    }
+    var sb structs.SuperBloque
+    if err := binary.Read(f, binary.LittleEndian, &sb); err != nil {
+        return nil, fmt.Errorf("error leyendo superbloque: %v", err)
+    }
+
+    // Buscar inodo de la ruta
+    inoIdx, err := commands.FindInodeByPath(f, &sb, ruta)
+    if err != nil {
+        return nil, fmt.Errorf("no se encontró la ruta '%s': %v", ruta, err)
+    }
+
+    ino, err := commands.ReadInode(f, &sb, inoIdx)
+    if err != nil {
+        return nil, fmt.Errorf("no se pudo leer inodo de la ruta: %v", err)
+    }
+
+    if len(ino.I_type) == 0 || ino.I_type[0] != 0 {
+        return nil, fmt.Errorf("la ruta especificada no es carpeta")
+    }
+
+    var archivos []structs.InfoArchivo
+
+    // Debug: Mostrar los bloques del inodo
+    fmt.Printf("I_block del inodo: %+v\n", ino.I_block)
+
+    // Recorremos los bloques de directorio
+    for _, blk := range ino.I_block {
+        if blk < 0 {
+            continue
+        }
+
+        fmt.Printf("Leyendo bloque de directorio: %d\n", blk)
+        bc, err := commands.ReadDirBlock(f, &sb, blk)
+        if err != nil {
+            fmt.Printf("Error leyendo bloque de directorio %d: %v\n", blk, err)
+            continue
+        }
+
+        fmt.Printf("Contenido del bloque: %+v\n", bc.B_content)
+        for _, content := range bc.B_content {
+            name := strings.TrimRight(string(content.B_name[:]), "\x00")
+            fmt.Printf("Entry: inodo=%d, nombre=%s\n", content.B_inodo, name)
+            if content.B_inodo < 0 || name == "" || name == "." || name == ".." {
+                continue
+            }
+
+            childIno, err := commands.ReadInode(f, &sb, content.B_inodo)
+            if err != nil {
+                fmt.Printf("Error leyendo inodo hijo %d: %v\n", content.B_inodo, err)
+                continue
+            }
+
+            info := structs.InfoArchivo{
+                Nombre:       name,
+                Propietario:  fmt.Sprintf("%d", childIno.I_uid),
+                Grupo:        fmt.Sprintf("%d", childIno.I_gid),
+                Size:         childIno.I_s,
+                Permisos:     fmt.Sprintf("%o", childIno.I_perm),
+                Creacion:     strings.TrimRight(string(childIno.I_ctime[:]), "\x00"),
+                Modificacion: strings.TrimRight(string(childIno.I_mtime[:]), "\x00"),
+            }
+            if len(childIno.I_type) > 0 && childIno.I_type[0] == 0 {
+                info.Tipo = "d"
+            } else {
+                info.Tipo = "f"
+            }
+            archivos = append(archivos, info)
+        }
+    }
+    fmt.Printf("Archivos en %s: %+v\n", ruta, archivos)
+    return archivos, nil
+}
+
+func buscarInodoPorRutaRaw(f *os.File, sb *structs.SuperBloque, ruta string) (structs.Inodo, error) {
+    if ruta == "/" {
+        ino, ok := structs.ObtenerInodo(f, sb, 0)
+        if !ok {
+            return ino, fmt.Errorf("no se pudo obtener el inodo raíz")
+        }
+        return ino, nil
+    }
+
+    parts := strings.Split(strings.Trim(ruta, "/"), "/")
+    fmt.Printf("Partes de la ruta: %+v\n", parts)
+    currentIno, ok := structs.ObtenerInodo(f, sb, 0)
+    if !ok {
+        return currentIno, fmt.Errorf("no se pudo obtener el inodo raíz")
+    }
+
+    for _, part := range parts {
+        if part == "" {
+            continue
+        }
+
+        foundIno := int32(-1)
+        for i := 0; i < structs.DIRECT_BLOCKS; i++ {
+            blockIdx := currentIno.I_block[i]
+            if blockIdx < 0 {
+                break
+            }
+            bc, ok := structs.LeerBloqueCarpeta(f, sb, blockIdx)
+            if ok {
+                for _, content := range bc.B_content {
+                    name := strings.TrimRight(string(content.B_name[:]), "\x00")
+                    if name == part {
+                        foundIno = content.B_inodo
+                        break
+                    }
+                }
+            }
+            if foundIno >= 0 {
+                break
+            }
+        }
+
+        if foundIno < 0 {
+            return currentIno, fmt.Errorf("ruta %s no encontrada", part)
+        }
+
+        currentIno, ok = structs.ObtenerInodo(f, sb, int(foundIno))
+        if !ok {
+            return currentIno, fmt.Errorf("no se pudo obtener el inodo %d", foundIno)
+        }
+    }
+
+    return currentIno, nil
 }

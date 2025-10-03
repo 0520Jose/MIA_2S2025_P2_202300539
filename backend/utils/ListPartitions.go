@@ -2,7 +2,6 @@ package utils
 
 import (
 	"encoding/binary"
-	"log"
 	"os"
 	"strings"
 	"backend/structs"
@@ -14,6 +13,7 @@ type PartitionInfo struct {
 	Status string `json:"status"`
 	Size   int32  `json:"size"`
 	Start  int32  `json:"start"`
+	Fit    string `json:"fit"`
 }
 
 func ListPartitions(diskPath string) ([]PartitionInfo, error) {
@@ -31,20 +31,27 @@ func ListPartitions(diskPath string) ([]PartitionInfo, error) {
 	var partitions []PartitionInfo
 	for _, part := range mbr.Mbr_partitions {
 		name := strings.TrimRight(string(part.Part_name[:]), "\x00")
-		if part.Part_status != 0 && name != "" {
+		if name != "" {
 			ptype := "Primaria"
 			if part.Part_type == 'e' || part.Part_type == 'E' {
 				ptype = "Extendida"
 			}
+			fit := string(part.Part_fit)
+
+			status := "No montada"
+			if part.Part_status != 0 {
+				status = "Montada"
+			}
+
 			partitions = append(partitions, PartitionInfo{
 				Name:   name,
 				Type:   ptype,
-				Status: "Montada",
+				Status: status,
 				Size:   part.Part_s,
 				Start:  part.Part_start,
+				Fit:    fit,
 			})
 
-			// Si es extendida, buscar EBRs (particiones lógicas)
 			if part.Part_type == 'e' || part.Part_type == 'E' {
 				ebrStart := part.Part_start
 				for {
@@ -56,13 +63,19 @@ func ListPartitions(diskPath string) ([]PartitionInfo, error) {
 						break
 					}
 					lname := strings.TrimRight(string(ebr.Part_name[:]), "\x00")
-					if ebr.Part_mount != 0 && lname != "" {
+					if lname != "" {
+						lfit := string(ebr.Part_fit)
+						lstatus := "No montada"
+						if ebr.Part_mount != 0 {
+							lstatus = "Montada"
+						}
 						partitions = append(partitions, PartitionInfo{
 							Name:   lname,
 							Type:   "Lógica",
-							Status: "Montada",
+							Status: lstatus,
 							Size:   ebr.Part_s,
 							Start:  ebr.Part_start,
+							Fit:    lfit,
 						})
 					}
 					if ebr.Part_next <= 0 {
@@ -73,6 +86,5 @@ func ListPartitions(diskPath string) ([]PartitionInfo, error) {
 			}
 		}
 	}
-	log.Println("Partitions found:", partitions)
 	return partitions, nil
 }

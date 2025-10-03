@@ -120,31 +120,6 @@ mount -path=/home/emanuel/Calificacion_MIA/Discos/Disco5.mia -name=Part53
 # ENLISTAR
 mounted
 
-#-----------------REPORTES PARTE 1-----------------
-#DISCO 1
-#ERROR ID NO ENCONTRADO
-rep -id=A391 -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_rE.jpg -name=mbr
-#REPORTE DISK
-rep -id=391A -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_r1_disk.jpg -name=disk
-#REPORTE MBR 
-rep -id=391A -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_r2_mbr.jpg -name=mbr
-
-#DISCO 3
-#ERROR ID NO ENCONTRADO
-rep -id=393B -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_rE_mbr.jpg -name=mbr
-#REPORTE DISK
-rep -id=391B -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_r3_disk.jpg -name=disk
-#REPORTE MBR
-rep -id=392B -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_r4_disk.jpg -name=mbr
-
-#DISCO 5
-#ERROR ID NO ENCONTRADO
-rep -id=IDx -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_rE_mbr.jpg -name=mbr
-#REPORTE DISK
-rep -id=391C -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_r5_disk.jpg -name=disk
-#REPORTE MBR
-rep -id=391C -Path=/home/emanuel/Calificacion_MIA/Reportes/p1_r6_mbr.jpg -name=mbr
-
 #-----------------5. MKFS-----------------
 mkfs -type=full -id=391A
 
@@ -242,27 +217,6 @@ cat -file1=/home/archivos/user/docs/Tarea2.txt
 cat -file1=/home/archivos/user/docs/Tarea3.txt
 
 #------------------------REPORTES PARTE 4----------------
-rep -id=391A -path=/home/emanuel/Calificacion_MIA/Reportes/p4_r1_inode.jpg -name=inode
-rep -id=391A -path=/home/emanuel/Calificacion_MIA/Reportes/p4_r2_block.jpg -name=block
-rep -id=391A -path=/home/emanuel/Calificacion_MIA/Reportes/p4_r3_bm_inode.txt -name=bm_inode
-rep -id=391A -path=/home/emanuel/Calificacion_MIA/Reportes/p4_r4_bm_block.txt -name=bm_block
-rep -id=391A -path=/home/emanuel/Calificacion_MIA/Reportes/p4_r5_sb.jpg -name=sb
-rep -id=391A -path=/home/emanuel/Calificacion_MIA/Reportes/p4_r6_file.txt -path_file_ls=/home/archivos/user/docs/Tarea2.txt  -name=file
-rep -id=391A -path=/home/emanuel/Calificacion_MIA/Reportes/p4_r7_ls.jpg -path_file_ls=/home/archivos/user/docs -name=ls
-rep -id=391A -path=/home/emanuel/Calificacion_MIA/Reportes/p4_r8_tree.png -name=tree
 
 #-----------------16. CHOWN-----------------
 chown -id=391A -path=/home/archivos/user/docs/Tarea.txt -user=root
-chown -id=391A -path=/home/archivos/user/docs -user=root
-chown -id=391A -path=/noexiste.txt -user=root
-
-#-----------------17. CHMOD-----------------
-chmod -id=391A -path=/home/archivos/user/docs/Tarea.txt -ugo=755
-chmod -id=391A -path=/home/archivos/user/docs -ugo=700
-chmod -id=391A -path=/noexiste.txt -ugo=777
-
-#-----------------18. FIND-----------------
-find -path=/home/archivos/user/docs -name=Tarea.txt
-find -path=/home/archivos/user/docs -name=*.txt
-find -path=/home/archivos/user/docs -name=?.txt
-find -path=/home/archivos/user/docs -name=Tarea?.txt

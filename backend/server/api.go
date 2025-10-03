@@ -76,6 +76,7 @@ func IniciarAPIServer(port string) {
     http.HandleFunc("/api/disks", ListDisksHandler)
     http.HandleFunc("/api/partitions", ListPartitionsHandler)
     http.HandleFunc("/api/files", ListFilesHandler)
+    http.HandleFunc("/api/file-content", FileContentHandler)
 
     log.Println("Iniciando el servidor API en el puerto", port)
     if err := http.ListenAndServe(port, nil); err != nil {
@@ -103,14 +104,63 @@ func ListPartitionsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListFilesHandler(w http.ResponseWriter, r *http.Request) {
-    diskPath := r.URL.Query().Get("disk")
-    partitionName := r.URL.Query().Get("partition")
-    internalPath := r.URL.Query().Get("path")
-    log.Printf("API ListFiles: disk=%s, partition=%s, path=%s\n", diskPath, partitionName, internalPath)
-    particiones, err := utils.ListFiles(diskPath, internalPath)
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
+    diskPath := r.URL.Query().Get("disk")       // Ruta completa del disco, ej: /home/emanuel/Calificacion_MIA/Discos/Disco1.mia
+    partitionName := r.URL.Query().Get("partition") // Nombre de la partición, ej: Part11
+    path := r.URL.Query().Get("path")           // Ruta dentro del FS
+
+    if diskPath == "" || partitionName == "" || path == "" {
+        http.Error(w, "Faltan parámetros (disk, partition, path)", http.StatusBadRequest)
         return
     }
-    json.NewEncoder(w).Encode(particiones)
+
+    // Usar utils para obtener los archivos de la partición
+    files, err := utils.ListFilesFromDisk(diskPath, partitionName, path)
+    if err != nil {
+        http.Error(w, "Error listando archivos: "+err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    // Convertir a JSON
+    type FileNode struct {
+        Name        string `json:"name"`
+        Type        string `json:"type"`
+        Size        int32  `json:"size"`
+        Permissions string `json:"permissions"`
+    }
+
+    var nodes []FileNode
+    for _, f := range files {
+        t := "f"
+        if f.Tipo == "d" {
+            t = "d"
+        }
+        nodes = append(nodes, FileNode{
+            Name:        f.Nombre,
+            Type:        t,
+            Size:        f.Size,
+            Permissions: f.Permisos,
+        })
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(nodes)
+}
+
+func FileContentHandler(w http.ResponseWriter, r *http.Request) {
+    disk := r.URL.Query().Get("disk")
+    partition := r.URL.Query().Get("partition")
+    path := r.URL.Query().Get("path")
+
+    if disk == "" || partition == "" || path == "" {
+        http.Error(w, "Faltan parámetros", http.StatusBadRequest)
+        return
+    }
+
+    content, err := utils.GetFileContent(disk, partition, path)
+    if err != nil {
+        json.NewEncoder(w).Encode(map[string]string{"content": "Error: " + err.Error()})
+        return
+    }
+
+    json.NewEncoder(w).Encode(map[string]string{"content": content})
 }

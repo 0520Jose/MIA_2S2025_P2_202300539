@@ -1,351 +1,533 @@
-html, body {
-  height: 100%;
+/* Importar fuente retro desde Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=MS+Sans+Serif:wght@400;700&display=swap');
+
+/* ========================
+   VARIABLES Y RESET
+======================== */
+* {
   margin: 0;
   padding: 0;
-  overflow-y: auto;
+  box-sizing: border-box;
 }
 
-:root {
-  --slate-50: #f8fafc;
-  --slate-100: #f1f5f9;
-  --slate-200: #e2e8f0;
-  --slate-300: #cbd5e1;
-  --slate-400: #94a3b8;
-  --slate-500: #64748b;
-  --slate-600: #475569;
-  --slate-700: #334155;
-  --slate-800: #1e293b;
-  --slate-900: #0f172a;
-  --blue-100: #dbeafe;
-  --blue-400: #60a5fa;
-  --blue-600: #2563eb;
-  --blue-900: #1e3a8a;
-  --green-100: #dcfce7;
-  --green-400: #4ade80;
-  --green-600: #16a34a;
-  --green-900: #14532d;
-  --orange-100: #fed7aa;
-  --orange-400: #fb923c;
-  --orange-600: #ea580c;
-  --orange-900: #9a3412;
-  --purple-100: #e9d5ff;
-  --purple-400: #c084fc;
-  --purple-600: #9333ea;
-  --purple-900: #581c87;
-  --red-500: #ef4444;
-  --yellow-500: #eab308;
-  --emerald-400: #34d399;
-  --emerald-500: #10b981;
-  --emerald-600: #059669;
+body {
+  font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
+  font-size: 11px;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
 }
 
-html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-}
-
+/* ========================
+   CONTENEDOR PRINCIPAL
+======================== */
 .ext-explorer-container {
   min-height: 100vh;
-  background: rgb(255, 255, 255);
-  font-family: 'Segoe UI', 'Roboto', 'Oxygen', sans-serif;
-  color: var(--slate-800);
-  overflow-y: auto;
+  background: #008080;
+  background-image: 
+    linear-gradient(45deg, #008080 25%, transparent 25%), 
+    linear-gradient(-45deg, #008080 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, #008080 75%), 
+    linear-gradient(-45deg, transparent 75%, #008080 75%);
+  background-size: 2px 2px;
+  background-position: 0 0, 0 1px, 1px -1px, -1px 0px;
+  padding: 12px;
 }
 
 .ext-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
 }
 
-.ext-header {
-  text-align: center;
-  margin-bottom: 2rem;
+/* ========================
+   ENCABEZADOS
+======================== */
+.ext-header,
+.ext-nav-header,
+.ext-explorer-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
+  padding: 8px 12px;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
 }
 
-.ext-icon-wrapper {
-  display: inline-flex;
+.ext-icon-wrapper,
+.ext-file-icon-wrapper {
+  background: #c0c0c0;
+  width: 32px;
+  height: 32px;
+  border: 2px inset #c0c0c0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 4rem;
-  height: 4rem;
-  background-color: var(--slate-600);
-  border-radius: 1rem;
-  margin-bottom: 1rem;
 }
 
 .ext-main-icon {
-  width: 2rem;
-  height: 2rem;
-  color: white;
+  color: #000080;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
 }
 
 .ext-title {
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: var(--slate-800);
-  margin-bottom: 0.5rem;
-}
-
-.ext-subtitle {
-  color: var(--slate-600);
-}
-
-.ext-disk-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 1.5rem;
-  max-width: 64rem;
-  margin: 0 auto;
-}
-
-.ext-disk-card {
-  background: rgb(99, 152, 177);
-  border-radius: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--slate-200);
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.ext-disk-card:hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-}
-
-.ext-card-content {
-  padding: 1.5rem;
-}
-
-.ext-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-
-.ext-disk-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.ext-disk-icon {
-  padding: 0.75rem;
-  border-radius: 0.75rem;
-}
-
-.ext-disk-icon.ext-ssd {
-  background-color: var(--blue-100);
-}
-
-.ext-disk-icon.ext-hdd {
-  background-color: var(--green-100);
-}
-
-.ext-disk-icon.ext-ssd .ext-icon {
-  color: var(--blue-600);
-}
-
-.ext-disk-icon.ext-hdd .ext-icon {
-  color: var(--green-600);
-}
-
-.ext-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.ext-disk-name {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--slate-800);
+  font-size: 14px;
+  font-weight: bold;
+  color: #000;
   margin: 0;
+  text-shadow: 1px 1px 0 #fff;
 }
 
-.ext-disk-details {
-  font-size: 0.875rem;
-  color: var(--slate-500);
-  margin: 0;
+.ext-subtitle,
+.ext-page-subtitle {
+  font-size: 11px;
+  color: #000;
+  margin: 2px 0 0;
 }
 
-.ext-linux-badge {
-  padding: 0.25rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 9999px;
-  background-color: var(--blue-100);
-  color: var(--blue-700);
-}
-
-.ext-disk-stats {
-  margin-bottom: 1.5rem;
-}
-
-.ext-stat-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.875rem;
-  margin-bottom: 0.5rem;
-}
-
-.ext-stat-row span:first-child {
-  color: var(--slate-600);
-}
-
-.ext-stat-value {
-  font-weight: 500;
-  color: var(--slate-800);
-}
-
-.ext-stat-value-green {
-  font-weight: 500;
-  color: var(--emerald-600);
-}
-
-.ext-stat-value-purple {
-  font-weight: 500;
-  color: var(--purple-600);
-}
-
-.ext-progress-section {
-  margin-top: 1rem;
-}
-
-.ext-progress-header {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  color: var(--slate-500);
-  margin-bottom: 0.5rem;
-}
-
-.ext-progress-bar {
-  width: 100%;
-  height: 0.5rem;
-  background-color: var(--slate-200);
-  border-radius: 9999px;
-  overflow: hidden;
-}
-
-.ext-progress-fill {
-  height: 100%;
-  transition: all 0.3s ease;
-  border-radius: 9999px;
-}
-
-.ext-progress-green {
-  background-color: var(--emerald-500);
-}
-
-.ext-progress-yellow {
-  background-color: var(--yellow-500);
-}
-
-.ext-progress-red {
-  background-color: var(--red-500);
-}
-
-.ext-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.ext-partition-count {
-  font-size: 0.875rem;
-  color: var(--slate-500);
-}
-
+/* ========================
+   BOTONES
+======================== */
 .ext-button {
-  border: none;
-  border-radius: 0.75rem;
-  font-size: 1rem;
-  font-weight: 500;
+  padding: 6px 12px;
+  font-weight: bold;
   cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 0.5rem 1rem;
+  transition: all 0.1s;
+  font-size: 11px;
+  font-family: inherit;
 }
 
 .ext-button-primary {
-  background-color: var(--slate-600);
-  color: white;
+  background-color: #c0c0c0;
+  color: #000;
+  border: 2px outset #c0c0c0;
 }
 
 .ext-button-primary:hover {
-  background-color: var(--slate-700);
+  background-color: #dfdfdf;
+}
+
+.ext-button-primary:active {
+  border: 2px inset #c0c0c0;
+  background-color: #a0a0a0;
 }
 
 .ext-button-secondary {
-  background-color: var(--slate-500);
-  color: white;
+  background-color: #c0c0c0;
+  color: #000;
+  border: 2px outset #c0c0c0;
 }
 
 .ext-button-secondary:hover {
-  background-color: var(--slate-600);
+  background-color: #dfdfdf;
+}
+
+.ext-button-secondary:active {
+  border: 2px inset #c0c0c0;
+  background-color: #a0a0a0;
 }
 
 .ext-button-full {
   width: 100%;
-  padding: 0.75rem 1rem;
+  padding: 8px;
+  margin-top: 12px;
 }
 
-.ext-nav-header {
+/* ========================
+   TARJETAS DE DISCO/PARTICIÓN
+======================== */
+.ext-disk-grid,
+.ext-partition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.ext-disk-card,
+.ext-partition-card {
+  background: #c0c0c0;
+  border: 3px outset #c0c0c0;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  overflow: hidden;
+  transition: all 0.1s;
+}
+
+.ext-disk-card:hover,
+.ext-partition-card:hover {
+  background: #dfdfdf;
+}
+
+.ext-disk-card:active,
+.ext-partition-card:active {
+  border: 3px inset #c0c0c0;
+  background: #a0a0a0;
+}
+
+.ext-card-content {
+  padding: 12px;
+}
+
+.ext-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.ext-disk-icon,
+.ext-partition-icon {
+  width: 32px;
+  height: 32px;
+  background: #c0c0c0;
+  border: 2px inset #c0c0c0;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 2rem;
+  justify-content: center;
+  margin-right: 8px;
 }
 
+.ext-disk-icon .ext-icon,
+.ext-partition-icon .ext-icon {
+  color: #000080;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ext-disk-name,
+.ext-partition-name {
+  font-size: 12px;
+  font-weight: bold;
+  margin: 0 0 4px;
+  color: #000;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-disk-details,
+.ext-partition-details {
+  font-size: 11px;
+  color: #000;
+  margin: 0 0 6px;
+}
+
+.ext-disk-meta,
+.ext-partition-meta {
+  font-size: 10px;
+  color: #404040;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ext-linux-badge,
+.ext-status-badge {
+  background: #c0c0c0;
+  color: #000;
+  padding: 2px 6px;
+  border: 1px inset #c0c0c0;
+  font-size: 10px;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-status-badge {
+  background: #c0c0c0;
+  color: #800000;
+}
+
+.ext-status-badge.ext-mounted {
+  background: #c0c0c0;
+  color: #008000;
+}
+
+/* ========================
+   NAVEGACIÓN
+======================== */
 .ext-back-button {
-  padding: 0.5rem;
-  background: none;
-  border: none;
-  border-radius: 0.75rem;
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  color: #000;
+  transition: all 0.1s;
 }
 
 .ext-back-button:hover {
-  background-color: var(--slate-200);
+  background: #dfdfdf;
+}
+
+.ext-back-button:active {
+  border: 2px inset #c0c0c0;
+  background: #a0a0a0;
 }
 
 .ext-back-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  color: var(--slate-600);
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
 }
 
-.ext-page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--slate-800);
-  margin: 0;
+.ext-breadcrumb {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  color: #000;
+  font-size: 11px;
 }
 
-.ext-page-subtitle {
-  color: var(--slate-600);
-  margin: 0;
+.ext-breadcrumb-item,
+.ext-breadcrumb-current {
+  cursor: pointer;
+  text-shadow: 1px 1px 0 #fff;
 }
 
-.ext-partition-grid {
+.ext-breadcrumb-current {
+  color: #000;
+  font-weight: bold;
+}
+
+.ext-breadcrumb-separator {
+  margin: 0 4px;
+  color: #404040;
+}
+
+/* ========================
+   EXPLORADOR DE ARCHIVOS
+======================== */
+.ext-file-explorer {
+  margin-top: 16px;
+}
+
+.ext-file-explorer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
+  margin-bottom: 12px;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.ext-partition-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #000;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-home-icon {
+  color: #000080;
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+}
+
+.ext-file-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-  gap: 1.5rem;
-  max-width: 96rem;
-  margin: 0 auto;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
 }
 
-.ext-partition-card {
-  background: rgb(99, 152, 177);
-  border-radius: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--slate-200);
-  transition: all 0.3s ease;
+.ext-file-item {
+  background: #c0c0c0;
+  border: 1px outset #c0c0c0;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.1s;
+  box-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+}
+
+.ext-file-item:hover {
+  background: #dfdfdf;
+}
+
+.ext-file-item:active {
+  border: 1px inset #c0c0c0;
+  background: #a0a0a0;
+}
+
+.ext-file-item-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ext-folder-icon {
+  background: #c0c0c0;
+  border: 1px inset #c0c0c0;
+}
+
+.ext-file-icon-item {
+  background: #c0c0c0;
+  border: 1px inset #c0c0c0;
+}
+
+.ext-folder-icon .ext-icon {
+  color: #000080;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ext-file-icon-item .ext-icon {
+  color: #008000;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ext-file-item-name {
+  font-size: 11px;
+  font-weight: bold;
+  margin: 0;
+  color: #000;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-file-item-meta {
+  font-size: 10px;
+  color: #404040;
+  margin: 2px 0 0;
+}
+
+/* ========================
+   CARPETA VACÍA
+======================== */
+.ext-empty-folder {
+  text-align: center;
+  padding: 32px 16px;
+  color: #404040;
+  background: #c0c0c0;
+  border: 2px inset #c0c0c0;
+  margin: 16px 0;
+}
+
+.ext-empty-folder-icon {
+  margin-bottom: 12px;
+}
+
+.ext-empty-icon {
+  width: 32px;
+  height: 32px;
+  color: #808080;
+  font-size: 32px;
+}
+
+.ext-empty-folder-title {
+  font-size: 12px;
+  color: #404040;
+  margin: 0 0 6px;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+/* ========================
+   VISTA DE ARCHIVO
+======================== */
+.ext-file-container {
+  margin-top: 16px;
+}
+
+.ext-file-card {
+  background: #c0c0c0;
+  border: 3px outset #c0c0c0;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
   overflow: hidden;
 }
 
-.ext-partition-card:hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+.ext-file-card-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid #808080;
+  background: #c0c0c0;
+}
+
+.ext-file-card-title {
+  margin: 0;
+  font-size: 12px;
+  color: #000;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-file-card-content {
+  padding: 12px;
+}
+
+.ext-file-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #000;
+  line-height: 1.4;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #fff;
+  padding: 8px;
+  border: 2px inset #c0c0c0;
+}
+
+.ext-loading,
+.ext-empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: #404040;
+  font-size: 12px;
+  background: #c0c0c0;
+  border: 2px inset #c0c0c0;
+  margin: 16px 0;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-empty-state {
+  color: #808080;
+}
+
+/* ========================
+   ALINEACIÓN Y BOTÓN DE INICIO
+======================== */
+.ext-nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+.ext-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ========================
+   SCROLLBARS ESTILO WINDOWS 95
+======================== */
+.ext-file-content::-webkit-scrollbar {
+  width: 16px;
+}
+
+.ext-file-content::-webkit-scrollbar-track {
+  background: #c0c0c0;
+  border: 1px inset #c0c0c0;
+}
+
+.ext-file-content::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
 }

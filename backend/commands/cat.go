@@ -66,7 +66,7 @@ func Cat(params map[string]string) string {
             path = "/home/users.txt"
         }
         
-        inoIdx, err := findInodeByPath(disk, sb, path)
+        inoIdx, err := FindInodeByPath(disk, sb, path)
         if err != nil {
             results = append(results, fmt.Sprintf("Error: %s -> %v", path, err))
             continue
@@ -84,7 +84,7 @@ func Cat(params map[string]string) string {
     return strings.Join(results, "\n")
 }
 
-func findInodeByPath(f *os.File, sb *structs.SuperBloque, path string) (int32, error) {
+func FindInodeByPath(f *os.File, sb *structs.SuperBloque, path string) (int32, error) {
     parts := strings.Split(path, "/")
     curr := int32(0)
     
@@ -98,7 +98,7 @@ func findInodeByPath(f *os.File, sb *structs.SuperBloque, path string) (int32, e
             continue
         }
         
-        ino, err := readInode(f, sb, curr)
+        ino, err := ReadInode(f, sb, curr)
         if err != nil {
             return -1, fmt.Errorf("leer inodo %d: %v", curr, err)
         }
@@ -118,7 +118,7 @@ func findInodeByPath(f *os.File, sb *structs.SuperBloque, path string) (int32, e
                 continue
             }
             
-            dir, err := readDirBlock(f, sb, blockIdx)
+            dir, err := ReadDirBlock(f, sb, blockIdx)
             if err != nil {
                 continue
             }
@@ -148,7 +148,7 @@ func findInodeByPath(f *os.File, sb *structs.SuperBloque, path string) (int32, e
 }
 
 func readFileContentWithIndirect(f *os.File, sb *structs.SuperBloque, inoIdx int32) (string, error) {
-    ino, err := readInode(f, sb, inoIdx)
+    ino, err := ReadInode(f, sb, inoIdx)
     if err != nil {
         return "", err
     }
@@ -211,7 +211,7 @@ func readFileContentWithIndirect(f *os.File, sb *structs.SuperBloque, inoIdx int
     return strings.TrimRight(string(contenido), "\x00"), nil
 }
 
-func readDirBlock(f *os.File, sb *structs.SuperBloque, blockIdx int32) (structs.BCarpeta, error) {
+func ReadDirBlock(f *os.File, sb *structs.SuperBloque, blockIdx int32) (structs.BCarpeta, error) {
     var bc structs.BCarpeta
     offset := int64(sb.S_block_start) + int64(blockIdx)*64
     if _, err := f.Seek(offset, io.SeekStart); err != nil {

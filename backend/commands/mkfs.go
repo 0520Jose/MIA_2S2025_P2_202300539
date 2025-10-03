@@ -11,7 +11,7 @@ import (
 )
 
 func Mkfs(params map[string]string) string {
-    allowed := map[string]struct{}{"-id": {}, "-type": {}}
+    allowed := map[string]struct{}{"-id": {}, "-type": {}, "-fs": {}}
     normalized := make(map[string]string, len(params))
     for k, v := range params {
         lk := strings.ToLower(strings.TrimSpace(k))
@@ -29,6 +29,21 @@ func Mkfs(params map[string]string) string {
         if strings.ToLower(strings.TrimSpace(t)) != "full" {
             return "Error: tipo de formateo no válido, solo 'full'"
         }
+    }
+
+    fs := "ext2"
+    if f, ok := normalized["-fs"]; ok && strings.TrimSpace(f) != "" {
+        f = strings.ToLower(strings.TrimSpace(f))
+        if f == "2fs" {
+            f = "ext2"
+        }
+        if f == "3fs" {
+            f = "ext3"
+        }
+        if f != "ext2" && f != "ext3" {
+            return "Error: sistema de archivos no válido, solo 'ext2' o 'ext3'"
+        }
+        fs = f
     }
 
     var pm *structs.PartitionMount
@@ -75,10 +90,15 @@ func Mkfs(params map[string]string) string {
     blockSize := int32(binary.Size(structs.BArchivo{}))
     sbSize := int32(binary.Size(structs.SuperBloque{}))
 
-    numerador := tam - sbSize
+    journalSize := int32(0)
+    if fs == "ext3" {
+        journalSize = int32(1024 * 4)
+    }
+
+    numerador := tam - sbSize - journalSize
     denominador := int32(4) + inodeSize + 3*blockSize
     if denominador <= 0 || numerador <= denominador {
-        return "Error: partición demasiado pequeña para EXT2"
+        return "Error: partición demasiado pequeña para EXT2/EXT3"
     }
     n := numerador / denominador
     if n < 3 {
@@ -87,6 +107,9 @@ func Mkfs(params map[string]string) string {
 
     var sb structs.SuperBloque
     sb.S_filesystem_type = 2
+    if fs == "ext3" {
+        sb.S_filesystem_type = 3
+    }
     sb.S_magic = 0xEF53
     copy(sb.S_mtime[:], fecha17())
     copy(sb.S_umtime[:], fecha17())
@@ -97,7 +120,7 @@ func Mkfs(params map[string]string) string {
     sb.S_inode_s = inodeSize
     sb.S_block_s = blockSize
 
-    sb.S_bm_inode_start = inicio + sbSize
+    sb.S_bm_inode_start = inicio + sbSize + journalSize
     sb.S_bm_block_start = sb.S_bm_inode_start + sb.S_inodes_count
     sb.S_inode_start = sb.S_bm_block_start + sb.S_blocks_count
     sb.S_block_start = sb.S_inode_start + sb.S_inodes_count*sb.S_inode_s
@@ -114,6 +137,16 @@ func Mkfs(params map[string]string) string {
     }
     if err := binary.Write(f, binary.LittleEndian, &sb); err != nil {
         return "Error al escribir superbloque: " + err.Error()
+    }
+
+    if fs == "ext3" {
+        journal := make([]byte, journalSize)
+        if _, err := f.Seek(int64(inicio)+int64(sbSize), 0); err != nil {
+            return "Error al posicionar journal: " + err.Error()
+        }
+        if _, err := f.Write(journal); err != nil {
+            return "Error al escribir journal: " + err.Error()
+        }
     }
 
     if _, err := f.Seek(int64(sb.S_bm_inode_start), 0); err != nil {
@@ -257,6 +290,9 @@ func Mkfs(params map[string]string) string {
         return fmt.Sprintf("Error: formateo falló - %v", err)
     }
 
+    if fs == "ext3" {
+        return fmt.Sprintf("Sistema de archivos EXT3 creado correctamente en la partición con ID %s", id)
+    }
     return fmt.Sprintf("Sistema de archivos EXT2 creado correctamente en la partición con ID %s", id)
 }
 
