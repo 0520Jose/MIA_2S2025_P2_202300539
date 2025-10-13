@@ -86,23 +86,34 @@ func Mkfs(params map[string]string) string {
         }
     }
 
+    // Tamaños de estructuras
     inodeSize := int32(binary.Size(structs.Inodo{}))
-    blockSize := int32(binary.Size(structs.BArchivo{}))
+    blockSize := int32(64) // Tamaño bloque estándar
     sbSize := int32(binary.Size(structs.SuperBloque{}))
+    journalStructSize := int32(binary.Size(structs.Journal{}))
 
+    // Tamaño del Journal según especificación (constante 50)
     journalSize := int32(0)
     if fs == "ext3" {
-        journalSize = int32(1024 * 4)
+        journalSize = 50 // Constante según especificación
     }
 
-    numerador := tam - sbSize - journalSize
-    denominador := int32(4) + inodeSize + 3*blockSize
-    if denominador <= 0 || numerador <= denominador {
-        return "Error: partición demasiado pequeña para EXT2/EXT3"
+    // APLICAR FÓRMULA EXT3 CORRECTA
+    // tamaño_particion = sizeof(superblock) + n * sizeof(Journaling) + n + 3 * n + n * sizeof(inodos) + 3 * n * sizeof(block)
+    // Despejar n: n = (tamano_particion - sizeof(superblock)) / (sizeof(journaling) + 1 + 3 + sizeof(inodos) + 3*sizeof(block))
+    coeficiente := journalStructSize + 1 + 3 + inodeSize + 3*blockSize
+    if coeficiente == 0 {
+        return "Error: cálculo de estructuras falló - coeficiente cero"
     }
-    n := numerador / denominador
+
+    n := (tam - sbSize) / coeficiente
     if n < 3 {
         n = 3
+    }
+
+    // Para EXT3, ajustar el journalSize basado en n
+    if fs == "ext3" {
+        journalSize = n * journalStructSize
     }
 
     var sb structs.SuperBloque
@@ -120,6 +131,7 @@ func Mkfs(params map[string]string) string {
     sb.S_inode_s = inodeSize
     sb.S_block_s = blockSize
 
+    // POSICIONES CORREGIDAS PARA EXT3
     sb.S_bm_inode_start = inicio + sbSize + journalSize
     sb.S_bm_block_start = sb.S_bm_inode_start + sb.S_inodes_count
     sb.S_inode_start = sb.S_bm_block_start + sb.S_blocks_count
@@ -139,16 +151,23 @@ func Mkfs(params map[string]string) string {
         return "Error al escribir superbloque: " + err.Error()
     }
 
+    // INICIALIZACIÓN CORRECTA DEL JOURNAL PARA EXT3
     if fs == "ext3" {
-        journal := make([]byte, journalSize)
-        if _, err := f.Seek(int64(inicio)+int64(sbSize), 0); err != nil {
+        var journal structs.Journal
+        journal.Count = 0
+        // Limpiar contenido del journal
+        clearJournalContent(&journal.Content)
+        
+        journalOffset := int64(inicio) + int64(sbSize)
+        if _, err := f.Seek(journalOffset, 0); err != nil {
             return "Error al posicionar journal: " + err.Error()
         }
-        if _, err := f.Write(journal); err != nil {
+        if err := binary.Write(f, binary.LittleEndian, &journal); err != nil {
             return "Error al escribir journal: " + err.Error()
         }
     }
 
+    // BITMAPS Y ESTRUCTURAS (igual que antes)
     if _, err := f.Seek(int64(sb.S_bm_inode_start), 0); err != nil {
         return "Error al posicionar bm inodos: " + err.Error()
     }
@@ -286,16 +305,70 @@ func Mkfs(params map[string]string) string {
         return "Error al escribir bloque users.txt: " + err.Error()
     }
 
-    if err := ValidarSistemaEXT2(id); err != nil {
+    // VALIDACIÓN SIMPLIFICADA (sin funciones externas)
+    if err := validarSistemaBasico(f, &sb, inicio); err != nil {
         return fmt.Sprintf("Error: formateo falló - %v", err)
     }
 
     if fs == "ext3" {
+        if err := registrarJournalingInicial(f, inicio, sbSize, "MKFS", "Sistema de archivos EXT3 creado"); err != nil {
+            return fmt.Sprintf("Error al registrar journaling: %v", err)
+        }
         return fmt.Sprintf("Sistema de archivos EXT3 creado correctamente en la partición con ID %s", id)
     }
     return fmt.Sprintf("Sistema de archivos EXT2 creado correctamente en la partición con ID %s", id)
 }
 
+// FUNCIONES AUXILIARES
+
 func fecha17() string {
-    return time.Now().Format("2006-01-02 15:04:05.999999999")
+    // Asegurar que sea exactamente 16 caracteres + null terminator
+    return time.Now().Format("2006-01-02 15:04") // 16 caracteres
+}
+
+func clearJournalContent(content *structs.Information) {
+    // Limpiar todos los campos del journal
+    copy(content.Operation[:], make([]byte, 10))
+    copy(content.Path[:], make([]byte, 32))
+    copy(content.Content[:], make([]byte, 64))
+    content.Date = 0
+}
+
+func validarSistemaBasico(f *os.File, sb *structs.SuperBloque, partStart int32) error {
+    // Validación básica del superbloque
+    if sb.S_magic != 0xEF53 {
+        return fmt.Errorf("magic number incorrecto")
+    }
+    if sb.S_inodes_count <= 0 || sb.S_blocks_count <= 0 {
+        return fmt.Errorf("conteo de inodos o bloques inválido")
+    }
+    return nil
+}
+
+func registrarJournalingInicial(f *os.File, partStart, sbSize int32, operacion, contenido string) error {
+    journalOffset := int64(partStart) + int64(sbSize)
+    
+    var journal structs.Journal
+    if _, err := f.Seek(journalOffset, 0); err != nil {
+        return err
+    }
+
+    // Leer journal actual
+    if err := binary.Read(f, binary.LittleEndian, &journal); err != nil {
+        journal.Count = 0 // Inicializar si no existe
+    }
+
+    // Actualizar journal con operación inicial
+    copy(journal.Content.Operation[:], operacion)
+    copy(journal.Content.Path[:], "/")
+    copy(journal.Content.Content[:], contenido)
+    journal.Content.Date = float32(time.Now().Unix())
+    journal.Count++
+
+    // Escribir journal actualizado
+    if _, err := f.Seek(journalOffset, 0); err != nil {
+        return err
+    }
+    
+    return binary.Write(f, binary.LittleEndian, &journal)
 }

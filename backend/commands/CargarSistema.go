@@ -70,6 +70,10 @@ func ValidarSistemaEXT2(partitionID string) error {
     return nil
 }
 
+func ValidarSistemaEXT3(id string) error {
+    return ValidarSistemaEXT2(id)
+}
+
 const (
     permRead  = 4
     permWrite = 2

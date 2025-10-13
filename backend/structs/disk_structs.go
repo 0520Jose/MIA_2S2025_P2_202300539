@@ -6,6 +6,7 @@ import (
     "io"
     "os"
     "strings"
+    "time"
     "path/filepath"
 )
 
@@ -689,8 +690,67 @@ func BuscarInodoPorRuta_(f *os.File, sb *SuperBloque, ruta string) (Inodo, int32
 
     return currentIno, currentIdx, nil
 }
-
+/*
 func EscribirBloqueArchivo(f *os.File, sb *SuperBloque, blockIdx int32, ba *BArchivo) error {
+    offset := int64(sb.S_block_start) + int64(blockIdx)*64
+    if _, err := f.Seek(offset, io.SeekStart); err != nil {
+        return err
+    }
+    return binary.Write(f, binary.LittleEndian, ba)
+}*/
+
+func EscribirBloqueArchivo(f *os.File, sb *SuperBloque, partStart int32, blockIdx int32, ba *BArchivo, operacion, ruta string) error {
+    offset := int64(sb.S_block_start) + int64(blockIdx)*64
+    if _, err := f.Seek(offset, io.SeekStart); err != nil {
+        return err
+    }
+    
+    // Escribir el bloque
+    if err := binary.Write(f, binary.LittleEndian, ba); err != nil {
+        return err
+    }
+    
+    // Si es EXT3, registrar en journal
+    if sb.S_filesystem_type == 3 {
+        contenido := trimBytes(ba.B_content[:])
+        if err := RegistrarOperacion(f, partStart, operacion, ruta, contenido); err != nil {
+            // No fallar la operación principal si el journal falla, solo loggear
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+    
+    return nil
+}
+
+// RegistrarOperacion registra una operación en el journal EXT3
+func RegistrarOperacion(f *os.File, partStart int32, operacion, ruta, contenido string) error {
+    journal, err := LeerJournal(f, partStart)
+    if err != nil {
+        // Inicializar journal si no existe
+        journal = Journal{Count: 0}
+    }
+
+    // Actualizar información
+    copy(journal.Content.Operation[:], operacion)
+    copy(journal.Content.Path[:], ruta)
+    
+    // Limitar contenido a 64 bytes
+    if len(contenido) > 64 {
+        contenido = contenido[:64]
+    }
+    copy(journal.Content.Content[:], contenido)
+    
+    journal.Content.Date = float32(time.Now().Unix())
+    
+    // Incrementar contador
+    journal.Count++
+
+    return EscribirJournal(f, partStart, &journal)
+}
+
+
+// EscribirBloqueArchivoCompatible mantiene compatibilidad con código existente
+func EscribirBloqueArchivoCompatible(f *os.File, sb *SuperBloque, blockIdx int32, ba *BArchivo) error {
     offset := int64(sb.S_block_start) + int64(blockIdx)*64
     if _, err := f.Seek(offset, io.SeekStart); err != nil {
         return err
@@ -698,12 +758,43 @@ func EscribirBloqueArchivo(f *os.File, sb *SuperBloque, blockIdx int32, ba *BArc
     return binary.Write(f, binary.LittleEndian, ba)
 }
 
-func EscribirBloqueApuntadores(f *os.File, sb *SuperBloque, blockIdx int32, bp *BApuntadores) error {
-    offset := int64(sb.S_block_start) + int64(blockIdx)*64
-    if _, err := f.Seek(offset, io.SeekStart); err != nil {
+// Nueva función con soporte EXT3
+func EscribirBloqueArchivoEXT3(f *os.File, sb *SuperBloque, partStart int32, blockIdx int32, ba *BArchivo, operacion, ruta string) error {
+    return EscribirBloqueArchivo(f, sb, partStart, blockIdx, ba, operacion, ruta)
+}
+
+// EscribirArchivoConJournal maneja la escritura completa con journaling
+func EscribirArchivoConJournal(id, ruta, contenido, operacion string) error {
+    f, sb, particion, err := SuperBloque_ID(id)
+    if err != nil {
         return err
     }
-    return binary.Write(f, binary.LittleEndian, bp)
+    defer f.Close()
+
+    // Buscar o crear inodo para la ruta
+    ino, inodeIdx, err := BuscarInodoPorRuta_(f, sb, ruta)
+    if err != nil {
+        return err
+    }
+
+    if EsCarpeta(ino) {
+        return fmt.Errorf("la ruta %s es una carpeta, no un archivo", ruta)
+    }
+
+    data := []byte(contenido)
+    totalBloques := (len(data) + 63) / 64
+
+    for i := 0; i < totalBloques && i < 12; i++ {
+        var block BArchivo
+        copy(block.B_content[:], data[i*64:min((i+1)*64, len(data))])
+        
+        // Usar la nueva función con journaling
+        if err := EscribirBloqueArchivo(f, sb, particion.Part_start, ino.I_block[i], &block, operacion, ruta); err != nil {
+            return err
+        }
+    }
+
+    return nil
 }
 
 
