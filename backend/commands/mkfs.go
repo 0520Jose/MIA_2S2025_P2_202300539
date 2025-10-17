@@ -86,21 +86,16 @@ func Mkfs(params map[string]string) string {
         }
     }
 
-    // Tamaños de estructuras
     inodeSize := int32(binary.Size(structs.Inodo{}))
-    blockSize := int32(64) // Tamaño bloque estándar
+    blockSize := int32(64) 
     sbSize := int32(binary.Size(structs.SuperBloque{}))
     journalStructSize := int32(binary.Size(structs.Journal{}))
 
-    // Tamaño del Journal según especificación (constante 50)
     journalSize := int32(0)
     if fs == "ext3" {
-        journalSize = 50 // Constante según especificación
+        journalSize = 50
     }
 
-    // APLICAR FÓRMULA EXT3 CORRECTA
-    // tamaño_particion = sizeof(superblock) + n * sizeof(Journaling) + n + 3 * n + n * sizeof(inodos) + 3 * n * sizeof(block)
-    // Despejar n: n = (tamano_particion - sizeof(superblock)) / (sizeof(journaling) + 1 + 3 + sizeof(inodos) + 3*sizeof(block))
     coeficiente := journalStructSize + 1 + 3 + inodeSize + 3*blockSize
     if coeficiente == 0 {
         return "Error: cálculo de estructuras falló - coeficiente cero"
@@ -111,7 +106,6 @@ func Mkfs(params map[string]string) string {
         n = 3
     }
 
-    // Para EXT3, ajustar el journalSize basado en n
     if fs == "ext3" {
         journalSize = n * journalStructSize
     }
@@ -131,7 +125,6 @@ func Mkfs(params map[string]string) string {
     sb.S_inode_s = inodeSize
     sb.S_block_s = blockSize
 
-    // POSICIONES CORREGIDAS PARA EXT3
     sb.S_bm_inode_start = inicio + sbSize + journalSize
     sb.S_bm_block_start = sb.S_bm_inode_start + sb.S_inodes_count
     sb.S_inode_start = sb.S_bm_block_start + sb.S_blocks_count
@@ -151,12 +144,12 @@ func Mkfs(params map[string]string) string {
         return "Error al escribir superbloque: " + err.Error()
     }
 
-    // INICIALIZACIÓN CORRECTA DEL JOURNAL PARA EXT3
     if fs == "ext3" {
         var journal structs.Journal
         journal.Count = 0
-        // Limpiar contenido del journal
-        clearJournalContent(&journal.Content)
+        for i := range journal.Content {
+            clearJournalContent(&journal.Content[i])
+        }
         
         journalOffset := int64(inicio) + int64(sbSize)
         if _, err := f.Seek(journalOffset, 0); err != nil {
@@ -167,7 +160,6 @@ func Mkfs(params map[string]string) string {
         }
     }
 
-    // BITMAPS Y ESTRUCTURAS (igual que antes)
     if _, err := f.Seek(int64(sb.S_bm_inode_start), 0); err != nil {
         return "Error al posicionar bm inodos: " + err.Error()
     }
@@ -305,7 +297,6 @@ func Mkfs(params map[string]string) string {
         return "Error al escribir bloque users.txt: " + err.Error()
     }
 
-    // VALIDACIÓN SIMPLIFICADA (sin funciones externas)
     if err := validarSistemaBasico(f, &sb, inicio); err != nil {
         return fmt.Sprintf("Error: formateo falló - %v", err)
     }
@@ -319,15 +310,12 @@ func Mkfs(params map[string]string) string {
     return fmt.Sprintf("Sistema de archivos EXT2 creado correctamente en la partición con ID %s", id)
 }
 
-// FUNCIONES AUXILIARES
 
 func fecha17() string {
-    // Asegurar que sea exactamente 16 caracteres + null terminator
-    return time.Now().Format("2006-01-02 15:04") // 16 caracteres
+    return time.Now().Format("2006-01-02 15:04")
 }
 
 func clearJournalContent(content *structs.Information) {
-    // Limpiar todos los campos del journal
     copy(content.Operation[:], make([]byte, 10))
     copy(content.Path[:], make([]byte, 32))
     copy(content.Content[:], make([]byte, 64))
@@ -335,7 +323,6 @@ func clearJournalContent(content *structs.Information) {
 }
 
 func validarSistemaBasico(f *os.File, sb *structs.SuperBloque, partStart int32) error {
-    // Validación básica del superbloque
     if sb.S_magic != 0xEF53 {
         return fmt.Errorf("magic number incorrecto")
     }
@@ -353,19 +340,16 @@ func registrarJournalingInicial(f *os.File, partStart, sbSize int32, operacion, 
         return err
     }
 
-    // Leer journal actual
     if err := binary.Read(f, binary.LittleEndian, &journal); err != nil {
-        journal.Count = 0 // Inicializar si no existe
+        journal.Count = 0
     }
 
-    // Actualizar journal con operación inicial
-    copy(journal.Content.Operation[:], operacion)
-    copy(journal.Content.Path[:], "/")
-    copy(journal.Content.Content[:], contenido)
-    journal.Content.Date = float32(time.Now().Unix())
-    journal.Count++
+    copy(journal.Content[0].Operation[:], operacion)
+    copy(journal.Content[0].Path[:], "/")
+    copy(journal.Content[0].Content[:], contenido)
+    journal.Content[0].Date = float32(time.Now().Unix())
+    journal.Count = 1
 
-    // Escribir journal actualizado
     if _, err := f.Seek(journalOffset, 0); err != nil {
         return err
     }

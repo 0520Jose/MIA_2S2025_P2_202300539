@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// Find busca archivos y carpetas según un patrón en una ruta
 func Find(params map[string]string) string {
 	path, okPath := params["-path"]
 	pattern, okName := params["-name"]
@@ -27,7 +26,6 @@ func Find(params map[string]string) string {
 		return fmt.Sprintf("Error: ruta no encontrada: %v", err)
 	}
 
-	// Verificar permisos de lectura sobre la ruta inicial
 	if !Permisos(&inode, permRead) {
 		return fmt.Sprintf("Error: no tiene permisos de lectura sobre %s", path)
 	}
@@ -42,7 +40,6 @@ func Find(params map[string]string) string {
 	return strings.Join(resultados, "\n")
 }
 
-// buscarRecursivo recorre el inodo y sus hijos aplicando patrón
 func buscarRecursivo(f *os.File, sb *structs.SuperBloque, inode structs.Inodo, rutaActual, patron string, resultados *[]string) {
 	if !Permisos(&inode, permRead) {
 		return
@@ -85,7 +82,6 @@ func buscarRecursivo(f *os.File, sb *structs.SuperBloque, inode structs.Inodo, r
 	}
 }
 
-// wildcardMatch soporta * y ? en patrones
 func wildcardMatch(pattern, str string) bool {
 	p, s := 0, 0
 	star, match := -1, 0

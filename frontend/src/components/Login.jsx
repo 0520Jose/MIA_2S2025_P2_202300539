@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Cookies from 'js-cookie';
-import { useNavigate} from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import './Login.css';
 
 const Login = () => {
@@ -9,122 +9,190 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    alert(username);
-    Cookies.set('usuario', username, { expires: 7 });
-    navigate('/main');
-    setTimeout(() => {
-      alert(`ID: ${partitionId}\nUsuario: ${username}\nContraseña: ${password}\nRecordar: ${remember}`);
+    setError('');
+
+    if (!partitionId || !username || !password) {
+      setError('Todos los campos son obligatorios');
       setIsLoading(false);
-    }, 1000);
+      return;
+    }
+
+    try {
+      const loginCommand = `login -user=${username} -pass=${password} -id=${partitionId}`;
+      
+      const response = await fetch('http://localhost:8000/execute', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          comando: loginCommand 
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.salida && data.salida.includes('Error')) {
+        setError('Credenciales incorrectas o partición no existe');
+        setIsLoading(false);
+        return;
+      }
+
+      Cookies.set('usuario', username, { expires: remember ? 7 : 1 });
+      Cookies.set('partitionId', partitionId, { expires: remember ? 7 : 1 });
+      
+      setTimeout(() => {
+        navigate('/main');
+        setIsLoading(false);
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error en login:', error);
+      setError('Error de conexión con el servidor');
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancel = () => {
+    navigate('/main');
   };
 
   return (
-    <div className="login-main-container">
-      <div className="login-header">
-        <div className="login-logo-container">
-          <div className="login-logo">
-            <div className="login-logo-inner"></div>
+    <div className="login-bg">
+      <div className="login-window">
+        <div className="login-header">
+          <div className="login-title-bar">
+            <div className="login-title-icon">🔒</div>
+            <div className="login-title-text">Iniciar Sesión - ExtreamFS</div>
+            <div className="login-title-controls">
+              <button className="login-close-btn" onClick={handleCancel}>×</button>
+            </div>
           </div>
         </div>
-        <h2 className="login-title">
-          Iniciar sesión
-        </h2>
-        <p className="login-subtitle">
-          Accede a tu cuenta para continuar
-        </p>
-      </div>
 
-      <div className="login-form-container">
-        <div className="login-card">
+        <div className="login-content">
+          <div className="login-logo-section">
+            <div className="login-logo">
+              <div className="login-logo-disk">💾</div>
+            </div>
+            <div className="login-system-info">
+              <h3>ExtreamFS</h3>
+              <p>Sistema de Archivos Avanzado</p>
+            </div>
+          </div>
+
           <form className="login-form" onSubmit={handleSubmit}>
+            {error && (
+              <div className="login-error">
+                <div className="error-icon">⚠</div>
+                <div className="error-text">{error}</div>
+              </div>
+            )}
+
             <div className="form-group">
               <label htmlFor="partitionId" className="form-label">
-                ID Partición
+                ID de Partición:
               </label>
               <input
                 id="partitionId"
                 name="partitionId"
                 type="text"
-                autoComplete="username"
                 required
                 value={partitionId}
-                onChange={(e) => setPartitionId(e.target.value)}
+                onChange={(e) => setPartitionId(e.target.value.toUpperCase())}
                 className="form-input"
                 placeholder="Ej: 391A"
+                disabled={isLoading}
               />
             </div>
+
             <div className="form-group">
               <label htmlFor="username" className="form-label">
-                Usuario
+                Usuario:
               </label>
               <input
                 id="username"
                 name="username"
                 type="text"
-                autoComplete="username"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="form-input"
                 placeholder="Ingresa tu usuario"
+                disabled={isLoading}
               />
             </div>
+
             <div className="form-group">
               <label htmlFor="password" className="form-label">
-                Contraseña
+                Contraseña:
               </label>
               <input
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="form-input"
                 placeholder="••••••••"
+                disabled={isLoading}
               />
             </div>
-            <div className="remember-container">
-              <div className="checkbox-group">
+
+            <div className="form-options">
+              <label className="checkbox-container">
                 <input
-                  id="remember"
-                  name="remember"
                   type="checkbox"
                   checked={remember}
                   onChange={() => setRemember(!remember)}
-                  className="form-checkbox"
+                  disabled={isLoading}
                 />
-                <label htmlFor="remember" className="checkbox-label">
-                  Recordar usuario
-                </label>
-              </div>
+                <span className="checkmark"></span>
+                Recordar usuario
+              </label>
             </div>
-            <div>
+
+            <div className="form-buttons">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="btn-cancel"
+                disabled={isLoading}
+              >
+                Cancelar
+              </button>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="submit-button"
+                className="btn-login"
               >
                 {isLoading ? (
-                  <div className="loading-container">
-                    <svg className="loading-spinner" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                  <div className="login-loading">
+                    <div className="login-spinner"></div>
                     Iniciando sesión...
                   </div>
                 ) : (
-                  'Iniciar sesión'
+                  'Iniciar Sesión'
                 )}
               </button>
             </div>
           </form>
+
+          <div className="login-footer">
+            <div className="login-help">
+              <button type="button" className="btn-help">
+                ?
+              </button>
+              <span>Ayuda</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

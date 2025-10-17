@@ -122,7 +122,7 @@ func Mkfile(params map[string]string) string {
     ino.I_type[0] = 1
     ino.I_perm = [3]byte{6, 6, 4}
 
-    if err := asignarBloquesArchivo(disk, sb, &ino, data); err != nil {
+    if err := asignarBloquesArchivo(disk, sb, &ino, data, pm.Partition.Part_start, ruta); err != nil {
         return "Error al asignar bloques: " + err.Error()
     }
 
@@ -138,10 +138,18 @@ func Mkfile(params map[string]string) string {
         return "Error al actualizar superbloque: " + err.Error()
     }
 
+    if sb.S_filesystem_type == 3 {
+        contenido := string(data)
+        if len(contenido) > 128 {
+            contenido = contenido[:128]
+        }
+        RegistrarOperacionJournal(disk, sb, pm.Partition.Part_start, "mkfile", ruta, contenido)
+    }
+
     return "Archivo creado exitosamente"
 }
 
-func asignarBloquesArchivo(f *os.File, sb *structs.SuperBloque, ino *structs.Inodo, data []byte) error {
+func asignarBloquesArchivo(f *os.File, sb *structs.SuperBloque, ino *structs.Inodo, data []byte, partStart int32, ruta string) error {
     blocksNeeded := (len(data) + 63) / 64
     blockIndex := 0
 
@@ -161,7 +169,7 @@ func asignarBloquesArchivo(f *os.File, sb *structs.SuperBloque, ino *structs.Ino
         var blockData structs.BArchivo
         copy(blockData.B_content[:], data[start:end])
 
-        if err := structs.EscribirBloqueArchivo(f, sb, blk, &blockData); err != nil {
+        if err := structs.EscribirBloqueArchivo(f, sb, partStart, blk, &blockData, "write", ruta); err != nil {
             return err
         }
         blockIndex++
@@ -196,7 +204,7 @@ func asignarBloquesArchivo(f *os.File, sb *structs.SuperBloque, ino *structs.Ino
             var blockData structs.BArchivo
             copy(blockData.B_content[:], data[start:end])
 
-            if err := structs.EscribirBloqueArchivo(f, sb, dataBlk, &blockData); err != nil {
+            if err := structs.EscribirBloqueArchivo(f, sb, partStart, dataBlk, &blockData, "write", ruta); err != nil {
                 return err
             }
             blockIndex++
@@ -250,7 +258,7 @@ func asignarBloquesArchivo(f *os.File, sb *structs.SuperBloque, ino *structs.Ino
                 var blockData structs.BArchivo
                 copy(blockData.B_content[:], data[start:end])
 
-                if err := structs.EscribirBloqueArchivo(f, sb, dataBlk, &blockData); err != nil {
+                if err := structs.EscribirBloqueArchivo(f, sb, partStart, dataBlk, &blockData, "write", ruta); err != nil {
                     return err
                 }
                 blockIndex++

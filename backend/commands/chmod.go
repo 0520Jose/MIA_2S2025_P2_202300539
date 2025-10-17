@@ -53,6 +53,14 @@ func Chmod(partID, ruta, ugo string, recursivo bool) error {
         return err
     }
 
+
+    if sb.S_filesystem_type == 3 {
+        contenido := ugo
+        if err := RegistrarOperacionJournal(f, sb, sb.S_bm_inode_start, "chmod", ruta, contenido); err != nil {
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+
     if recursivo && structs.EsCarpeta(ino) {
         hijos, err := structs.ListaCarpetasFS(partID, ruta)
         if err == nil {

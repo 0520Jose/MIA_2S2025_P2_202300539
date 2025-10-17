@@ -16,13 +16,11 @@ func ListFilesFromDisk(diskPath, partitionName, ruta string) ([]structs.InfoArch
     }
     defer f.Close()
 
-    // Leer MBR
     var mbr structs.MBR
     if err := binary.Read(f, binary.LittleEndian, &mbr); err != nil {
         return nil, fmt.Errorf("error leyendo MBR: %v", err)
     }
 
-    // Buscar partición
     var start int32 = -1
     for _, part := range mbr.Mbr_partitions {
         name := strings.TrimRight(string(part.Part_name[:]), "\x00")
@@ -35,7 +33,6 @@ func ListFilesFromDisk(diskPath, partitionName, ruta string) ([]structs.InfoArch
         return nil, fmt.Errorf("partición %s no encontrada", partitionName)
     }
 
-    // Leer superbloque
     if _, err := f.Seek(int64(start), 0); err != nil {
         return nil, fmt.Errorf("error buscando superbloque: %v", err)
     }
@@ -44,7 +41,6 @@ func ListFilesFromDisk(diskPath, partitionName, ruta string) ([]structs.InfoArch
         return nil, fmt.Errorf("error leyendo superbloque: %v", err)
     }
 
-    // Buscar inodo de la ruta
     inoIdx, err := commands.FindInodeByPath(f, &sb, ruta)
     if err != nil {
         return nil, fmt.Errorf("no se encontró la ruta '%s': %v", ruta, err)
@@ -61,10 +57,8 @@ func ListFilesFromDisk(diskPath, partitionName, ruta string) ([]structs.InfoArch
 
     var archivos []structs.InfoArchivo
 
-    // Debug: Mostrar los bloques del inodo
     fmt.Printf("I_block del inodo: %+v\n", ino.I_block)
 
-    // Recorremos los bloques de directorio
     for _, blk := range ino.I_block {
         if blk < 0 {
             continue

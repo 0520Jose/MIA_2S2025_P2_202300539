@@ -76,6 +76,13 @@ func Move(params map[string]string) string {
         }
     }
 
+    pm := getMountByID(usuarioActual.PartitionID)
+    if sb.S_filesystem_type == 3 && pm != nil {
+        if err := RegistrarOperacionJournal(disk, sb, pm.Partition.Part_start, "move", rutaOrigen, rutaDestino); err != nil {
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+
     return "Movimiento realizado correctamente."
 }
 

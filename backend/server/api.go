@@ -104,23 +104,21 @@ func ListPartitionsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListFilesHandler(w http.ResponseWriter, r *http.Request) {
-    diskPath := r.URL.Query().Get("disk")       // Ruta completa del disco, ej: /home/emanuel/Calificacion_MIA/Discos/Disco1.mia
-    partitionName := r.URL.Query().Get("partition") // Nombre de la partición, ej: Part11
-    path := r.URL.Query().Get("path")           // Ruta dentro del FS
+    diskPath := r.URL.Query().Get("disk")
+    partitionName := r.URL.Query().Get("partition")
+    path := r.URL.Query().Get("path")
 
     if diskPath == "" || partitionName == "" || path == "" {
         http.Error(w, "Faltan parámetros (disk, partition, path)", http.StatusBadRequest)
         return
     }
 
-    // Usar utils para obtener los archivos de la partición
     files, err := utils.ListFilesFromDisk(diskPath, partitionName, path)
     if err != nil {
         http.Error(w, "Error listando archivos: "+err.Error(), http.StatusInternalServerError)
         return
     }
 
-    // Convertir a JSON
     type FileNode struct {
         Name        string `json:"name"`
         Type        string `json:"type"`

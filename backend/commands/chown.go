@@ -59,6 +59,13 @@ func Chown(partID, ruta, nuevoUsuario string, recursivo bool) error {
         return err
     }
 
+    if sb.S_filesystem_type == 3 {
+        contenido := nuevoUsuario
+        if err := RegistrarOperacionJournal(f, sb, sb.S_bm_inode_start, "chown", ruta, contenido); err != nil {
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+
     if recursivo && structs.EsCarpeta(ino) {
         hijos, err := structs.ListaCarpetasFS(partID, ruta)
         if err != nil {

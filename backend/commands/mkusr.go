@@ -61,6 +61,13 @@ func Mkusr(args map[string]string) string {
         return "Error al escribir users.txt: " + err.Error()
     }
 
+    if sb.S_filesystem_type == 3 {
+        contenidoJournal := fmt.Sprintf("%s,%s,%s", grp, user, pass)
+        if err := RegistrarOperacionJournal(disk, sb, sb.S_bm_inode_start, "mkusr", "/home/users.txt", contenidoJournal); err != nil {
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+
     return fmt.Sprintf("Usuario '%s' creado exitosamente en el grupo '%s' con ID %d", user, grp, nuevoID)
 }
 

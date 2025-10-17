@@ -3,19 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import './Inicio.css';
 
 const Inicio = () => {
-  // ========================
-  // ESTADO DEL COMPONENTE
-  // ========================
   const [loading, setLoading] = useState(false);
 
-  // ========================
-  // HOOKS Y NAVEGACIÓN
-  // ========================
   const navigate = useNavigate();
 
-  // ========================
-  // HANDLERS DE NAVEGACIÓN
-  // ========================
   const handleEnterSystem = () => {
     setLoading(true);
     
@@ -25,9 +16,6 @@ const Inicio = () => {
     }, 1500);
   };
 
-  // ========================
-  // COMPONENTES DE RENDER
-  // ========================
   const renderLoadingOverlay = () => (
     loading && (
       <div className="loading-overlay">
@@ -74,9 +62,6 @@ const Inicio = () => {
     </div>
   );
 
-  // ========================
-  // RENDER PRINCIPAL
-  // ========================
   return (
     <div className="inicio-container">
       {renderLoadingOverlay()}

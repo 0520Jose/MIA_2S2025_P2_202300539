@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // 👈 Importamos useNavigate
+import { useNavigate } from 'react-router-dom';
 import { HardDrive, Folder, File, ArrowLeft, Home, Monitor } from 'lucide-react';
 import './Explorer.css';
 
 const FileExplorer = () => {
-  const navigate = useNavigate(); // 👈 Hook de navegación
+  const navigate = useNavigate();
 
   const [disks, setDisks] = useState([]);
   const [selectedDisk, setSelectedDisk] = useState(null);
@@ -15,12 +15,10 @@ const FileExplorer = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
 
-  // Estados de carga
   const [loadingDisks, setLoadingDisks] = useState(true);
   const [loadingPartitions, setLoadingPartitions] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
-  // Función para mostrar tamaños legibles
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
     const kb = bytes / 1024;
@@ -31,7 +29,6 @@ const FileExplorer = () => {
     return `${gb.toFixed(2)} GB`;
   };
 
-  // Cargar discos
   useEffect(() => {
     setLoadingDisks(true);
     fetch('/api/disks')
@@ -43,7 +40,6 @@ const FileExplorer = () => {
       .finally(() => setLoadingDisks(false));
   }, []);
 
-  // Cargar particiones al seleccionar disco
   useEffect(() => {
     if (selectedDisk) {
       setLoadingPartitions(true);
@@ -60,7 +56,6 @@ const FileExplorer = () => {
     }
   }, [selectedDisk]);
 
-  // Cargar archivos al cambiar partición o ruta
   useEffect(() => {
     if (selectedDisk && selectedPartition) {
       setLoadingFiles(true);
@@ -75,7 +70,6 @@ const FileExplorer = () => {
     }
   }, [selectedDisk, selectedPartition, currentPath]);
 
-  // Cargar contenido de archivo
   useEffect(() => {
     if (selectedFile && selectedDisk && selectedPartition) {
       const filePath = currentPath.endsWith('/') ? currentPath + selectedFile : `${currentPath}/${selectedFile}`;
@@ -86,12 +80,10 @@ const FileExplorer = () => {
     }
   }, [selectedFile]);
 
-  // Función para ir a /main
   const goToMain = () => {
-    navigate('/main'); // 👈 Navegación suave sin recarga
+    navigate('/main');
   };
 
-  // --- Vista principal de discos ---
   if (!selectedDisk) {
     return (
       <div className="ext-explorer-container">
@@ -149,7 +141,6 @@ const FileExplorer = () => {
     );
   }
 
-  // --- Vista de particiones ---
   if (!selectedPartition) {
     return (
       <div className="ext-explorer-container">
@@ -186,12 +177,12 @@ const FileExplorer = () => {
                           <p className="ext-partition-meta">
                             Tamaño: {formatSize(partition.size)} <br />
                             Fit: {partition.fit} <br />
-                            Estado: {partition.mounted ? 'Montada' : 'No montada'}
+                            Estado: {partition.status}
                           </p>
                         </div>
                       </div>
-                      <span className={`ext-status-badge ${partition.mounted ? 'ext-mounted' : ''}`}>
-                        {partition.mounted ? 'Montada' : 'No montada'}
+                      <span className={`ext-status-badge ${partition.status}`}>
+                        {partition.status}
                       </span>
                     </div>
                     <button
@@ -213,7 +204,6 @@ const FileExplorer = () => {
     );
   }
 
-  // --- Vista de archivo individual ---
   if (selectedFile) {
     return (
       <div className="ext-explorer-container">
@@ -249,7 +239,6 @@ const FileExplorer = () => {
     );
   }
 
-  // --- Vista explorador de archivos ---
   return (
     <div className="ext-explorer-container">
       <div className="ext-container">

@@ -84,5 +84,11 @@ func Mkdir(params map[string]string) string {
         return "Error al actualizar superbloque: " + err.Error()
     }
 
+    if sb.S_filesystem_type == 3 {
+
+        
+        RegistrarOperacionJournal(disk, sb, pm.Partition.Part_start, "mkdir", ruta, "")
+    }
+
     return "Carpeta creada exitosamente"
 }

@@ -100,7 +100,7 @@ func Rename(params map[string]string) string {
 	}
 
 	if sb.S_filesystem_type == 3 {
-		if err := RegistrarOperacionJournal(disk, sb, "rename", ruta, nuevoNombre); err != nil {
+		if err := RegistrarOperacionJournal(disk, sb, pm.Partition.Part_start, "rename", ruta, nuevoNombre); err != nil {
 			fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
 		}
 	}

@@ -81,5 +81,12 @@ func Chgrp(args map[string]string) string {
         return "Error al escribir users.txt: " + err.Error()
     }
 
+    if sb.S_filesystem_type == 3 {
+        contenidoJournal := fmt.Sprintf("%s->%s", user, grp)
+        if err := RegistrarOperacionJournal(disk, sb, sb.S_bm_inode_start, "chgrp", "/home/users.txt", contenidoJournal); err != nil {
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+
     return fmt.Sprintf("Usuario '%s' movido al grupo '%s' exitosamente", user, grp)
 }

@@ -3,16 +3,17 @@ package structs
 import (
     "encoding/binary"
     "os"
+    "io"
 )
 
 type Journal struct {
     Count   int32
-    Content Information 
+    Content [50]Information 
 }
 
 type Information struct {
     Operation [10]byte
-    Path      [32]byte
+    Path      [128]byte
     Content   [64]byte 
     Date      float32
 }
@@ -52,7 +53,6 @@ type SuperBloqueEXT3 struct {
 }
 
 func CalcularEstructurasEXT3(tamanoParticion int64) int {
-    // Tamaños de estructuras
     sizeofSuperblock := int64(binary.Size(SuperBloque{}))
     sizeofJournaling := int64(JournalConstant)
     sizeofInodo := int64(binary.Size(Inodo{}))

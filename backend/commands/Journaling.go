@@ -2,6 +2,7 @@ package commands
 
 import (
     "encoding/json"
+    "backend/structs"
     "strings"
     "time"
 )
@@ -30,13 +31,13 @@ func Journaling(params map[string]string) string {
 
     entries := make([]JournalEntry, 0, len(journal))
     for _, entry := range journal {
-        op := strings.Trim(string(entry.I_operation[:]), "\x00")
-        path := strings.Trim(string(entry.I_path[:]), "\x00")
-        content := strings.Trim(string(entry.I_content[:]), "\x00")
+        op := strings.Trim(string(entry.Operation[:]), "\x00")
+        path := strings.Trim(string(entry.Path[:]), "\x00")
+        content := strings.Trim(string(entry.Content[:]), "\x00")
 
         var dateStr string
-        if entry.I_date > 0 {
-            t := int64(entry.I_date)
+        if entry.Date > 0 {
+            t := int64(entry.Date)
             dateStr = time.Unix(t, 0).Format("2006-01-02 15:04:05")
         }
 
@@ -47,10 +48,28 @@ func Journaling(params map[string]string) string {
             Date:      dateStr,
         })
     }
-
     jsonData, _ := json.Marshal(struct {
         Entries []JournalEntry `json:"entries"`
     }{entries})
 
     return string(jsonData)
+}
+
+func ObtenerJournal(id string) ([]structs.Information, error) {
+    f, _, particion, err := structs.SuperBloque_ID(id)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close()
+    journal, err := structs.LeerJournal(f, particion.Part_start)
+    if err != nil {
+        return nil, err
+    }
+    operaciones := make([]structs.Information, 0)
+    if journal.Count > 0 {
+        for i := int32(0); i < journal.Count && i < int32(len(journal.Content)); i++ {
+            operaciones = append(operaciones, journal.Content[i])
+        }
+    }
+    return operaciones, nil
 }

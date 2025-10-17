@@ -683,7 +683,6 @@ func redimensionarParticion(file *os.File, mbr *structs.MBR, name string, addByt
 							if tmp.Part_mount == 1 && int64(tmp.Part_start) > int64(ebr.Part_start) {
 								if int64(tmp.Part_start) < nextEbrPos {
 									nextEbrPos = int64(pos)
-									// break? no; puede existir uno más cercano, así que seguir
 								}
 							}
 							if tmp.Part_next == -1 || tmp.Part_next == 0 {

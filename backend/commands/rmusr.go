@@ -70,5 +70,12 @@ func Rmusr(args map[string]string) string {
         return "Error al escribir users.txt: " + err.Error()
     }
 
+    if sb.S_filesystem_type == 3 {
+        contenidoJournal := target
+        if err := RegistrarOperacionJournal(disk, sb, sb.S_bm_inode_start, "rmusr", "/home/users.txt", contenidoJournal); err != nil {
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+
     return fmt.Sprintf("Usuario '%s' eliminado exitosamente", target)
 }

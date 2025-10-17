@@ -47,6 +47,13 @@ func Mkgrp(args map[string]string) string {
         return "Error al escribir users.txt: " + err.Error()
     }
 
+    if sb.S_filesystem_type == 3 {
+        contenidoJournal := name
+        if err := RegistrarOperacionJournal(disk, sb, sb.S_bm_inode_start, "mkgrp", "/home/users.txt", contenidoJournal); err != nil {
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+
     return fmt.Sprintf("Grupo '%s' creado exitosamente con ID %d", name, nuevoID)
 }
 
