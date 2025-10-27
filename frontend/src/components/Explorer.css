@@ -1,9 +1,3 @@
-/* Importar fuente retro desde Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=MS+Sans+Serif:wght@400;700&display=swap');
-
-/* ========================
-   VARIABLES Y RESET
-======================== */
 * {
   margin: 0;
   padding: 0;
@@ -11,16 +5,13 @@
 }
 
 body {
-  font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
+  font-family: 'Tahoma', 'Arial', sans-serif;
   font-size: 11px;
   image-rendering: pixelated;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
 }
 
-/* ========================
-   CONTENEDOR PRINCIPAL
-======================== */
 .ext-explorer-container {
   min-height: 100vh;
   background: #008080;
@@ -39,9 +30,6 @@ body {
   margin: 0 auto;
 }
 
-/* ========================
-   ENCABEZADOS
-======================== */
 .ext-header,
 .ext-nav-header,
 .ext-explorer-header {
@@ -88,9 +76,6 @@ body {
   margin: 2px 0 0;
 }
 
-/* ========================
-   BOTONES
-======================== */
 .ext-button {
   padding: 6px 12px;
   font-weight: bold;
@@ -136,9 +121,6 @@ body {
   margin-top: 12px;
 }
 
-/* ========================
-   TARJETAS DE DISCO/PARTICIÓN
-======================== */
 .ext-disk-grid,
 .ext-partition-grid {
   display: grid;
@@ -242,9 +224,6 @@ body {
   color: #008000;
 }
 
-/* ========================
-   NAVEGACIÓN
-======================== */
 .ext-back-button {
   background: #c0c0c0;
   border: 2px outset #c0c0c0;
@@ -297,9 +276,6 @@ body {
   color: #404040;
 }
 
-/* ========================
-   EXPLORADOR DE ARCHIVOS
-======================== */
 .ext-file-explorer {
   margin-top: 16px;
 }
@@ -404,9 +380,6 @@ body {
   margin: 2px 0 0;
 }
 
-/* ========================
-   CARPETA VACÍA
-======================== */
 .ext-empty-folder {
   text-align: center;
   padding: 32px 16px;
@@ -435,9 +408,6 @@ body {
   text-shadow: 1px 1px 0 #fff;
 }
 
-/* ========================
-   VISTA DE ARCHIVO
-======================== */
 .ext-file-container {
   margin-top: 16px;
 }
@@ -498,9 +468,6 @@ body {
   color: #808080;
 }
 
-/* ========================
-   ALINEACIÓN Y BOTÓN DE INICIO
-======================== */
 .ext-nav-header {
   display: flex;
   justify-content: space-between;
@@ -515,9 +482,6 @@ body {
   align-items: center;
 }
 
-/* ========================
-   SCROLLBARS ESTILO WINDOWS 95
-======================== */
 .ext-file-content::-webkit-scrollbar {
   width: 16px;
 }
@@ -530,4 +494,13 @@ body {
 .ext-file-content::-webkit-scrollbar-thumb {
   background: #c0c0c0;
   border: 2px outset #c0c0c0;
+}
+
+.ext-file-content::-webkit-scrollbar-thumb:hover {
+  background: #dfdfdf;
+}
+
+.ext-file-content::-webkit-scrollbar-thumb:active {
+  border: 2px inset #c0c0c0;
+  background: #a0a0a0;
 }

@@ -1,9 +1,3 @@
-/* Importar fuente retro desde Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=MS+Sans+Serif:wght@400;700&display=swap');
-
-/* ========================
-   VARIABLES Y RESET
-======================== */
 * {
   margin: 0;
   padding: 0;
@@ -11,16 +5,13 @@
 }
 
 body {
-  font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
+  font-family: 'Tahoma', 'Arial', sans-serif;
   font-size: 11px;
   image-rendering: pixelated;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
 }
 
-/* ========================
-   CONTENEDOR PRINCIPAL
-======================== */
 .inicio-container {
   width: 100vw;
   height: 100vh;
@@ -38,9 +29,6 @@ body {
   overflow: hidden;
 }
 
-/* ========================
-   VENTANA PRINCIPAL
-======================== */
 .inicio-window {
   width: 480px;
   height: 360px;
@@ -53,6 +41,7 @@ body {
   display: flex;
   flex-direction: column;
   animation: windowOpen 0.3s ease-out;
+  position: relative;
 }
 
 @keyframes windowOpen {
@@ -70,9 +59,6 @@ body {
   }
 }
 
-/* ========================
-   BARRA DE TÍTULO
-======================== */
 .window-header {
   height: 22px;
   background: linear-gradient(to bottom, #0a4a6b 0%, #054666 50%, #03344a 100%);
@@ -135,9 +121,6 @@ body {
   font-weight: bold;
 }
 
-/* ========================
-   CONTENIDO DE LA VENTANA
-======================== */
 .window-content {
   flex: 1;
   padding: 32px 24px 24px 24px;
@@ -149,9 +132,6 @@ body {
   background: #c0c0c0;
 }
 
-/* ========================
-   LOGO
-======================== */
 .logo-container {
   display: flex;
   justify-content: center;
@@ -188,9 +168,6 @@ body {
   50% { transform: scale(1.1); }
 }
 
-/* ========================
-   TÍTULO
-======================== */
 .title-container {
   text-align: center;
   animation: titleFade 1s ease-in;
@@ -218,9 +195,6 @@ body {
   font-weight: normal;
 }
 
-/* ========================
-   BOTÓN PRINCIPAL
-======================== */
 .button-container {
   margin-top: 8px;
 }
@@ -263,9 +237,6 @@ body {
   height: 100%;
 }
 
-/* ========================
-   PIE DE PÁGINA
-======================== */
 .footer-container {
   margin-top: auto;
   text-align: center;
@@ -284,9 +255,6 @@ body {
   text-shadow: 1px 1px 0 #ffffff;
 }
 
-/* ========================
-   BARRA DE ESTADO
-======================== */
 .window-statusbar {
   height: 20px;
   background: #c0c0c0;
@@ -313,9 +281,6 @@ body {
   text-align: center;
 }
 
-/* ========================
-   OVERLAY DE CARGA
-======================== */
 .loading-overlay {
   position: fixed;
   top: 0;
@@ -363,9 +328,6 @@ body {
   text-align: center;
 }
 
-/* ========================
-   EFECTOS RETRO ADICIONALES
-======================== */
 .inicio-window::before {
   content: '';
   position: absolute;
@@ -385,9 +347,6 @@ body {
   z-index: 10;
 }
 
-/* ========================
-   RESPONSIVE DESIGN
-======================== */
 @media (max-width: 600px) {
   .inicio-window {
     width: 90vw;

@@ -31,7 +31,7 @@ const FileExplorer = () => {
 
   useEffect(() => {
     setLoadingDisks(true);
-    fetch('/api/disks')
+    fetch('http://18.223.185.41:8000/api/disks')
       .then(res => res.json())
       .then(data => {
         setDisks(Array.isArray(data) ? data : []);
@@ -43,7 +43,7 @@ const FileExplorer = () => {
   useEffect(() => {
     if (selectedDisk) {
       setLoadingPartitions(true);
-      fetch(`/api/partitions?path=${encodeURIComponent(selectedDisk.path)}`)
+      fetch(`http://18.223.185.41:8000/api/partitions?path=${encodeURIComponent(selectedDisk.path)}`)
         .then(res => res.json())
         .then(data => {
           setPartitions(Array.isArray(data) ? data : []);
@@ -59,7 +59,7 @@ const FileExplorer = () => {
   useEffect(() => {
     if (selectedDisk && selectedPartition) {
       setLoadingFiles(true);
-      fetch(`/api/files?disk=${encodeURIComponent(selectedDisk.path)}&partition=${encodeURIComponent(selectedPartition.name)}&path=${encodeURIComponent(currentPath)}`)
+      fetch(`http://18.223.185.41:8000/api/files?disk=${encodeURIComponent(selectedDisk.path)}&partition=${encodeURIComponent(selectedPartition.name)}&path=${encodeURIComponent(currentPath)}`)
         .then(res => res.json())
         .then(data => setFiles(Array.isArray(data) ? data : []))
         .catch(() => setFiles([]))
@@ -73,7 +73,7 @@ const FileExplorer = () => {
   useEffect(() => {
     if (selectedFile && selectedDisk && selectedPartition) {
       const filePath = currentPath.endsWith('/') ? currentPath + selectedFile : `${currentPath}/${selectedFile}`;
-      fetch(`/api/file-content?disk=${encodeURIComponent(selectedDisk.path)}&partition=${encodeURIComponent(selectedPartition.name)}&path=${encodeURIComponent(filePath)}`)
+      fetch(`http://18.223.185.41:8000/api/file-content?disk=${encodeURIComponent(selectedDisk.path)}&partition=${encodeURIComponent(selectedPartition.name)}&path=${encodeURIComponent(filePath)}`)
         .then(res => res.json())
         .then(data => setFileContent(data.content || ''))
         .catch(() => setFileContent('Error al cargar archivo'));

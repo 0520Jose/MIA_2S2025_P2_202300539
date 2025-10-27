@@ -92,7 +92,7 @@ const Main = () => {
     try {
       const logoutCommand = `logout`;
       
-      const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
+      const response = await fetch('http://18.223.185.41:8000/execute', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -353,7 +353,7 @@ const Main = () => {
 
     if (command.toLowerCase().startsWith('journaling -id=')) {
       try {
-        const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
+        const response = await fetch('http://18.223.185.41:8000/execute', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ comando: command }),
@@ -414,7 +414,7 @@ const Main = () => {
 
     if (command.toLowerCase().includes('login')) {
       try {
-      const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
+      const response = await fetch('http://18.223.185.41:8000/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comando: command }),
@@ -460,7 +460,7 @@ const Main = () => {
     }
 
     try {
-      const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
+      const response = await fetch('http://18.223.185.41:8000/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comando: command }),
