@@ -2,13 +2,13 @@ package commands
 
 import (
     "backend/structs"
+    "encoding/binary"
     "fmt"
     "io"
     "os"
     "strings"
+    "strconv"
     "time"
-    "encoding/binary"
-	"path/filepath"
 )
 
 func RecuperarEXT3(f *os.File, partStart int32, sb *structs.SuperBloque) error {
@@ -16,552 +16,933 @@ func RecuperarEXT3(f *os.File, partStart int32, sb *structs.SuperBloque) error {
         return fmt.Errorf("no es un sistema EXT3")
     }
 
+    if err := recrearEstructuraBaseEXT3(f, sb, partStart); err != nil {
+        return fmt.Errorf("error al recrear estructura base: %v", err)
+    }
+
     operaciones, err := ObtenerOperacionesJournal(f, partStart)
     if err != nil {
         return err
     }
+
+    operacionesProcesadas := make(map[string]bool)
 
     for _, op := range operaciones {
         operacion := strings.Trim(string(op.Operation[:]), "\x00")
         ruta := strings.Trim(string(op.Path[:]), "\x00")
         contenido := strings.Trim(string(op.Content[:]), "\x00")
 
+        if !strings.HasPrefix(ruta, "/") && ruta != "" {
+            ruta = "/" + ruta
+        }
+
+        clave := fmt.Sprintf("%s:%s", operacion, ruta)
+        if operacionesProcesadas[clave] {
+            fmt.Printf("Saltando operación duplicada: %s en %s\n", operacion, ruta)
+            continue
+        }
+        operacionesProcesadas[clave] = true
+
         fmt.Printf("Recuperando operación: %s en %s\n", operacion, ruta)
+        
         switch operacion {
         case "MKFS":
-            fmt.Println("Operación MKFS detectada (solo informativo, se ignora en recuperación)")
+            fmt.Println("Operación MKFS detectada (ya procesada)")
+        
         case "mkdir":
-            if err := CrearDirectorioFSConPartStart(f, sb, partStart, ruta); err != nil {
+            if err := recuperarMkdir(f, sb, partStart, ruta); err != nil {
                 fmt.Printf("Error al recuperar mkdir %s: %v\n", ruta, err)
             }
+        
         case "mkfile":
-            if err := EscribirArchivoFSConPartStart(f, sb, partStart, ruta, contenido); err != nil {
+            if err := recuperarMkfile(f, sb, partStart, ruta, contenido); err != nil {
                 fmt.Printf("Error al recuperar mkfile %s: %v\n", ruta, err)
             }
+        
         case "write", "create", "modify":
-            if err := EscribirArchivoFSConPartStart(f, sb, partStart, ruta, contenido); err != nil {
+            if err := recuperarWrite(f, sb, partStart, ruta, contenido); err != nil {
                 fmt.Printf("Error al recuperar %s %s: %v\n", operacion, ruta, err)
             }
-        case "delete":
-            fmt.Printf("Recuperación de eliminación no implementada para: %s\n", ruta)
+        
+        case "remove", "delete":
+            if err := recuperarRemove(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar remove %s: %v\n", ruta, err)
+            }
+        
+        case "edit":
+            if err := recuperarEdit(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar edit %s: %v\n", ruta, err)
+            }
+        
+        case "rename":
+            if err := recuperarRename(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar rename %s: %v\n", ruta, err)
+            }
+        
+        case "copy":
+            if err := recuperarCopy(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar copy %s: %v\n", ruta, err)
+            }
+        
+        case "move":
+            if err := recuperarMove(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar move %s: %v\n", ruta, err)
+            }
+        
+        case "chown":
+            if err := recuperarChown(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar chown %s: %v\n", ruta, err)
+            }
+        
+        case "chmod":
+            if err := recuperarChmod(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar chmod %s: %v\n", ruta, err)
+            }
+        case "mkgrp":
+            if err := recuperarMkgrp(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar mkgrp %s: %v\n", contenido, err)
+            }
+
+        case "rmgrp":
+            if err := recuperarRmgrp(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar rmgrp %s: %v\n", contenido, err)
+            }
+
+        case "mkusr":
+            if err := recuperarMkusr(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar mkusr %s: %v\n", contenido, err)
+            }
+
+        case "rmusr":
+            if err := recuperarRmusr(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar rmusr %s: %v\n", contenido, err)
+            }
+
+        case "chgrp":
+            if err := recuperarChgrp(f, sb, partStart, ruta, contenido); err != nil {
+                fmt.Printf("Error al recuperar chgrp %s: %v\n", contenido, err)
+            }
         default:
             fmt.Printf("Operación no soportada en recuperación: %s\n", operacion)
         }
     }
 
+    fmt.Println("Recuperación EXT3 completada exitosamente")
     return nil
 }
 
-func VerificarYCrearRaiz(f *os.File, sb *structs.SuperBloque, partStart int32) error {
-	bmInodos := make([]byte, sb.S_inodes_count)
-	if _, err := f.Seek(int64(sb.S_bm_inode_start), 0); err != nil {
-		return fmt.Errorf("error al leer bitmap inodos: %v", err)
-	}
-	if _, err := f.Read(bmInodos); err != nil {
-		return fmt.Errorf("error al leer bitmap inodos: %v", err)
-	}
-
-	if bmInodos[0] == 1 {
-		fmt.Println("  Inodo raíz ya existe")
-		return nil
-	}
-
-	fmt.Println("  Creando inodo raíz (0)...")
-
-	bmBloques := make([]byte, sb.S_blocks_count)
-	if _, err := f.Seek(int64(sb.S_bm_block_start), 0); err != nil {
-		return fmt.Errorf("error al leer bitmap bloques: %v", err)
-	}
-	if _, err := f.Read(bmBloques); err != nil {
-		return fmt.Errorf("error al leer bitmap bloques: %v", err)
-	}
-
-	bloqueRaiz := int32(0)
-	if bmBloques[0] == 1 {
-		for i := int32(0); i < sb.S_blocks_count; i++ {
-			if bmBloques[i] == 0 {
-				bloqueRaiz = i
-				break
-			}
-		}
-	}
-
-	fmt.Printf("  Usando bloque %d para directorio raíz\n", bloqueRaiz)
-
-	var inoRaiz structs.Inodo
-	inoRaiz.I_uid = 1
-	inoRaiz.I_gid = 1
-	inoRaiz.I_s = 0
-	ahora := time.Now().Format("2006-01-02 15:04")
-	copy(inoRaiz.I_atime[:], ahora)
-	copy(inoRaiz.I_ctime[:], ahora)
-	copy(inoRaiz.I_mtime[:], ahora)
-	for i := range inoRaiz.I_block {
-		inoRaiz.I_block[i] = -1
-	}
-	inoRaiz.I_type[0] = 0 
-	copy(inoRaiz.I_perm[:], "664")
-	inoRaiz.I_block[0] = bloqueRaiz
-
-	fmt.Printf("  Asignando bloque %d al inodo raíz\n", bloqueRaiz)
-
-	var bcRaiz structs.BCarpeta
-	bcRaiz.B_content[0].B_inodo = 0
-	copy(bcRaiz.B_content[0].B_name[:], ".")
-	bcRaiz.B_content[1].B_inodo = 0
-	copy(bcRaiz.B_content[1].B_name[:], "..")
-	for i := 2; i < 4; i++ {
-		bcRaiz.B_content[i].B_inodo = -1
-	}
-
-	offsetBloque := int64(sb.S_block_start) + int64(bloqueRaiz)*64
-	if _, err := f.Seek(offsetBloque, 0); err != nil {
-		return fmt.Errorf("error al posicionar bloque raíz: %v", err)
-	}
-	if err := binary.Write(f, binary.LittleEndian, &bcRaiz); err != nil {
-		return fmt.Errorf("error al escribir bloque raíz: %v", err)
-	}
-
-	offsetBitmapBloque := int64(sb.S_bm_block_start) + int64(bloqueRaiz)
-	if _, err := f.Seek(offsetBitmapBloque, 0); err != nil {
-		return err
-	}
-	if _, err := f.Write([]byte{1}); err != nil {
-		return err
-	}
-
-	offsetInodo := int64(sb.S_inode_start)
-	if _, err := f.Seek(offsetInodo, 0); err != nil {
-		return fmt.Errorf("error al posicionar inodo raíz: %v", err)
-	}
-	if err := binary.Write(f, binary.LittleEndian, &inoRaiz); err != nil {
-		return fmt.Errorf("error al escribir inodo raíz: %v", err)
-	}
-
-	offsetBitmapInodo := int64(sb.S_bm_inode_start)
-	if _, err := f.Seek(offsetBitmapInodo, 0); err != nil {
-		return err
-	}
-	if _, err := f.Write([]byte{1}); err != nil {
-		return err
-	}
-
-	if sb.S_first_ino == 0 {
-		sb.S_first_ino = 1
-	}
-	if sb.S_free_inodes_count == sb.S_inodes_count {
-		sb.S_free_inodes_count--
-	}
-	if sb.S_free_blocks_count == sb.S_blocks_count {
-		sb.S_free_blocks_count--
-	}
-
-	if _, err := f.Seek(int64(partStart), 0); err != nil {
-		return err
-	}
-	if err := binary.Write(f, binary.LittleEndian, sb); err != nil {
-		return fmt.Errorf("error al actualizar superbloque: %v", err)
-	}
-
-	if err := f.Sync(); err != nil {
-		fmt.Printf("Advertencia: no se pudo sincronizar: %v\n", err)
-	}
-
-	fmt.Println("  Inodo raíz creado exitosamente")
-	
-	if _, err := f.Seek(int64(partStart), 0); err != nil {
-		return err
-	}
-	if err := binary.Read(f, binary.LittleEndian, sb); err != nil {
-		return fmt.Errorf("error al releer superbloque: %v", err)
-	}
-	
-	_, ok := structs.ObtenerInodo(f, sb, 0)
-	if !ok {
-		return fmt.Errorf("no se pudo verificar el inodo raíz después de crearlo")
-	}
-	fmt.Println("  Verificación: inodo raíz es legible")
-	
-	return nil
+func recrearEstructuraBaseEXT3(f *os.File, sb *structs.SuperBloque, partStart int32) error {
+    fmt.Println("Recreando estructura base del filesystem EXT3...")
+    
+    if err := inicializarBitmapInodos(f, sb); err != nil {
+        return err
+    }
+    
+    if err := inicializarBitmapBloques(f, sb); err != nil {
+        return err
+    }
+    
+    if err := crearInodoRaiz(f, sb); err != nil {
+        return err
+    }
+    
+    if err := crearBloqueDirectorioRaiz(f, sb); err != nil {
+        return err
+    }
+    
+    if err := crearInodoHome(f, sb); err != nil {
+        return err
+    }
+    
+    if err := crearBloqueDirectorioHome(f, sb); err != nil {
+        return err
+    }
+    
+    if err := crearInodoUsersTxt(f, sb); err != nil {
+        return err
+    }
+    
+    if err := crearBloqueUsersTxt(f, sb); err != nil {
+        return err
+    }
+    
+    fmt.Println("Estructura base recreada exitosamente")
+    return nil
 }
 
-func CrearDirectorioFSConPartStart(f *os.File, sb *structs.SuperBloque, partStart int32, ruta string) error {
-	ruta = strings.TrimSpace(ruta)
-	if ruta == "" || ruta == "/" {
-		return nil
-	}
-
-	if err := VerificarYCrearRaiz(f, sb, partStart); err != nil {
-		return fmt.Errorf("error al verificar raíz: %v", err)
-	}
-
-	partes := strings.Split(strings.Trim(ruta, "/"), "/")
-	rutaActual := "/"
-
-	fmt.Printf("  Creando jerarquía para: %s (partes: %v)\n", ruta, partes)
-
-	for _, parte := range partes {
-		if parte == "" {
-			continue
-		}
-
-		rutaActual = filepath.Join(rutaActual, parte)
-
-		fmt.Printf("  Procesando: %s\n", rutaActual)
-
-		_, _, err := structs.BuscarInodoPorRuta_(f, sb, rutaActual)
-		if err == nil {
-			fmt.Printf("  Directorio ya existe: %s\n", rutaActual)
-			continue
-		}
-
-		fmt.Printf("  Directorio no existe, creando: %s\n", rutaActual)
-
-		rutaPadre := filepath.Dir(rutaActual)
-		fmt.Printf("  Buscando padre: %s\n", rutaPadre)
-		inodoPadre, inodoPadreNum, err := structs.BuscarInodoPorRuta_(f, sb, rutaPadre)
-		if err != nil {
-			return fmt.Errorf("no se pudo encontrar directorio padre %s: %v", rutaPadre, err)
-		}
-
-		if !structs.EsCarpeta(inodoPadre) {
-			return fmt.Errorf("%s no es un directorio", rutaPadre)
-		}
-
-		nuevoInodo := int32(sb.S_first_ino)
-		sb.S_first_ino++
-		sb.S_free_inodes_count--
-
-		var ino structs.Inodo
-		ino.I_uid = 1
-		ino.I_gid = 1
-		ino.I_s = 0
-		ahora := time.Now().Format("2006-01-02 15:04")
-		copy(ino.I_atime[:], ahora)
-		copy(ino.I_ctime[:], ahora)
-		copy(ino.I_mtime[:], ahora)
-		for i := range ino.I_block {
-			ino.I_block[i] = -1
-		}
-		ino.I_type[0] = 0
-		copy(ino.I_perm[:], "664")
-
-		nuevoBloque := int32(sb.S_first_blo)
-		sb.S_first_blo++
-		sb.S_free_blocks_count--
-		ino.I_block[0] = nuevoBloque
-
-		var bloqueCarpeta structs.BCarpeta
-		bloqueCarpeta.B_content[0].B_inodo = nuevoInodo
-		copy(bloqueCarpeta.B_content[0].B_name[:], ".")
-		bloqueCarpeta.B_content[1].B_inodo = inodoPadreNum
-		copy(bloqueCarpeta.B_content[1].B_name[:], "..")
-		for i := 2; i < 4; i++ {
-			bloqueCarpeta.B_content[i].B_inodo = -1
-		}
-
-		offset := int64(sb.S_block_start) + int64(nuevoBloque)*64
-		if _, err := f.Seek(offset, 0); err != nil {
-			return fmt.Errorf("error al posicionar bloque carpeta: %v", err)
-		}
-		if err := binary.Write(f, binary.LittleEndian, &bloqueCarpeta); err != nil {
-			return fmt.Errorf("error al escribir bloque carpeta: %v", err)
-		}
-
-		offsetBitmapBloque := int64(sb.S_bm_block_start) + int64(nuevoBloque)
-		if _, err := f.Seek(offsetBitmapBloque, 0); err != nil {
-			return err
-		}
-		if _, err := f.Write([]byte{1}); err != nil {
-			return err
-		}
-
-		offsetInodo := int64(sb.S_inode_start) + int64(nuevoInodo)*int64(sb.S_inode_s)
-		if _, err := f.Seek(offsetInodo, 0); err != nil {
-			return fmt.Errorf("error al posicionar inodo: %v", err)
-		}
-		if err := binary.Write(f, binary.LittleEndian, &ino); err != nil {
-			return fmt.Errorf("error al escribir inodo: %v", err)
-		}
-
-		offsetBitmapInodo := int64(sb.S_bm_inode_start) + int64(nuevoInodo)
-		if _, err := f.Seek(offsetBitmapInodo, 0); err != nil {
-			return err
-		}
-		if _, err := f.Write([]byte{1}); err != nil {
-			return err
-		}
-
-		if err := agregarEntradaDirectorio(f, sb, &inodoPadre, inodoPadreNum, parte, nuevoInodo); err != nil {
-			return fmt.Errorf("error al agregar entrada al directorio padre: %v", err)
-		}
-
-		if _, err := f.Seek(int64(partStart), 0); err != nil {
-			return err
-		}
-		if err := binary.Write(f, binary.LittleEndian, sb); err != nil {
-			return fmt.Errorf("error al actualizar superbloque: %v", err)
-		}
-
-		fmt.Printf("  Directorio creado: %s (inodo: %d)\n", rutaActual, nuevoInodo)
-	}
-
-	return nil
+func inicializarBitmapInodos(f *os.File, sb *structs.SuperBloque) error {
+    if _, err := f.Seek(int64(sb.S_bm_inode_start), 0); err != nil {
+        return err
+    }
+    
+    bitmap := make([]byte, sb.S_inodes_count)
+    if sb.S_inodes_count >= 1 {
+        bitmap[0] = 1
+    }
+    if sb.S_inodes_count >= 2 {
+        bitmap[1] = 1
+    }
+    if sb.S_inodes_count >= 3 {
+        bitmap[2] = 1
+    }
+    
+    if _, err := f.Write(bitmap); err != nil {
+        return err
+    }
+    
+    return nil
 }
 
-func agregarEntradaDirectorio(f *os.File, sb *structs.SuperBloque, inodoPadre *structs.Inodo, inodoPadreNum int32, nombre string, inodoHijo int32) error {
-	for i := 0; i < 12; i++ {
-		blockIdx := inodoPadre.I_block[i]
-		if blockIdx < 0 {
-			nuevoBloque := int32(sb.S_first_blo)
-			sb.S_first_blo++
-			sb.S_free_blocks_count--
-			inodoPadre.I_block[i] = nuevoBloque
-
-			var bc structs.BCarpeta
-			bc.B_content[0].B_inodo = inodoHijo
-			copy(bc.B_content[0].B_name[:], nombre)
-			for j := 1; j < 4; j++ {
-				bc.B_content[j].B_inodo = -1
-			}
-
-			offset := int64(sb.S_block_start) + int64(nuevoBloque)*64
-			if _, err := f.Seek(offset, 0); err != nil {
-				return err
-			}
-			if err := binary.Write(f, binary.LittleEndian, &bc); err != nil {
-				return err
-			}
-
-			offsetBitmap := int64(sb.S_bm_block_start) + int64(nuevoBloque)
-			if _, err := f.Seek(offsetBitmap, 0); err != nil {
-				return err
-			}
-			if _, err := f.Write([]byte{1}); err != nil {
-				return err
-			}
-
-			offsetInodo := int64(sb.S_inode_start) + int64(inodoPadreNum)*int64(sb.S_inode_s)
-			if _, err := f.Seek(offsetInodo, 0); err != nil {
-				return err
-			}
-			if err := binary.Write(f, binary.LittleEndian, inodoPadre); err != nil {
-				return err
-			}
-
-			return nil
-		}
-
-		bc, ok := structs.LeerBloqueCarpeta(f, sb, blockIdx)
-		if !ok {
-			continue
-		}
-
-		for j := 0; j < 4; j++ {
-			if bc.B_content[j].B_inodo < 0 {
-				bc.B_content[j].B_inodo = inodoHijo
-				copy(bc.B_content[j].B_name[:], nombre)
-
-				offset := int64(sb.S_block_start) + int64(blockIdx)*64
-				if _, err := f.Seek(offset, 0); err != nil {
-					return err
-				}
-				if err := binary.Write(f, binary.LittleEndian, &bc); err != nil {
-					return err
-				}
-				return nil
-			}
-		}
-	}
-
-	return fmt.Errorf("no hay espacio en el directorio padre")
+func inicializarBitmapBloques(f *os.File, sb *structs.SuperBloque) error {
+    if _, err := f.Seek(int64(sb.S_bm_block_start), 0); err != nil {
+        return err
+    }
+    
+    bitmap := make([]byte, sb.S_blocks_count)
+    if sb.S_blocks_count >= 1 {
+        bitmap[0] = 1
+    }
+    if sb.S_blocks_count >= 2 {
+        bitmap[1] = 1
+    }
+    if sb.S_blocks_count >= 3 {
+        bitmap[2] = 1
+    }
+    
+    if _, err := f.Write(bitmap); err != nil {
+        return err
+    }
+    
+    return nil
 }
 
-func EscribirArchivoFSConPartStart(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
-	ruta = strings.TrimSpace(ruta)
-	if ruta == "" || ruta == "/" {
-		return fmt.Errorf("ruta inválida para archivo")
-	}
-
-	if err := VerificarYCrearRaiz(f, sb, partStart); err != nil {
-		return fmt.Errorf("error al verificar raíz: %v", err)
-	}
-
-	rutaPadre := filepath.Dir(ruta)
-	if rutaPadre != "/" && rutaPadre != "." {
-		if err := CrearDirectorioFSConPartStart(f, sb, partStart, rutaPadre); err != nil {
-			return fmt.Errorf("error al crear directorios padre: %v", err)
-		}
-	}
-
-	ino, inodoNum, err := structs.BuscarInodoPorRuta_(f, sb, ruta)
-	if err != nil {
-		return crearNuevoArchivo(f, sb, partStart, ruta, contenido)
-	}
-
-	if structs.EsCarpeta(ino) {
-		return fmt.Errorf("la ruta %s es una carpeta, no un archivo", ruta)
-	}
-
-	return escribirContenidoArchivo(f, sb, partStart, ino, inodoNum, ruta, contenido)
+func crearInodoRaiz(f *os.File, sb *structs.SuperBloque) error {
+    var ino structs.Inodo
+    ino.I_uid = 1
+    ino.I_gid = 1
+    ino.I_s = int32(binary.Size(structs.BCarpeta{}))
+    t := fecha17()
+    copy(ino.I_atime[:], t)
+    copy(ino.I_ctime[:], t)
+    copy(ino.I_mtime[:], t)
+    
+    for i := range ino.I_block {
+        ino.I_block[i] = -1
+    }
+    ino.I_block[0] = 0
+    
+    ino.I_type[0] = 0
+    copy(ino.I_perm[:], "755")
+    
+    offset := int64(sb.S_inode_start) + 0*int64(sb.S_inode_s)
+    if _, err := f.Seek(offset, 0); err != nil {
+        return err
+    }
+    
+    return binary.Write(f, binary.LittleEndian, &ino)
 }
 
-func crearNuevoArchivo(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
-	rutaPadre := filepath.Dir(ruta)
-	nombreArchivo := filepath.Base(ruta)
-
-	inodoPadre, inodoPadreNum, err := structs.BuscarInodoPorRuta_(f, sb, rutaPadre)
-	if err != nil {
-		return fmt.Errorf("no se pudo encontrar directorio padre %s: %v", rutaPadre, err)
-	}
-
-	if !structs.EsCarpeta(inodoPadre) {
-		return fmt.Errorf("%s no es un directorio", rutaPadre)
-	}
-
-	nuevoInodo := int32(sb.S_first_ino)
-	sb.S_first_ino++
-	sb.S_free_inodes_count--
-
-	var ino structs.Inodo
-	ino.I_uid = 1
-	ino.I_gid = 1
-	ino.I_s = int32(len(contenido))
-	ahora := time.Now().Format("2006-01-02 15:04")
-	copy(ino.I_atime[:], ahora)
-	copy(ino.I_ctime[:], ahora)
-	copy(ino.I_mtime[:], ahora)
-	for i := range ino.I_block {
-		ino.I_block[i] = -1
-	}
-	ino.I_type[0] = 1
-	copy(ino.I_perm[:], "664")
-
-	data := []byte(contenido)
-	totalBloques := (len(data) + 63) / 64
-	if totalBloques > 12 {
-		totalBloques = 12
-	}
-
-	for i := 0; i < totalBloques; i++ {
-		nuevoBloque := int32(sb.S_first_blo)
-		sb.S_first_blo++
-		sb.S_free_blocks_count--
-		ino.I_block[i] = nuevoBloque
-
-		var block structs.BArchivo
-		inicio := i * 64
-		fin := min((i+1)*64, len(data))
-		copy(block.B_content[:], data[inicio:fin])
-
-		if err := structs.EscribirBloqueArchivo(f, sb, partStart, nuevoBloque, &block, "write", ruta); err != nil {
-			return fmt.Errorf("error al escribir bloque %d: %v", i, err)
-		}
-
-		offsetBitmap := int64(sb.S_bm_block_start) + int64(nuevoBloque)
-		if _, err := f.Seek(offsetBitmap, 0); err != nil {
-			return err
-		}
-		if _, err := f.Write([]byte{1}); err != nil {
-			return err
-		}
-	}
-
-	offsetInodo := int64(sb.S_inode_start) + int64(nuevoInodo)*int64(sb.S_inode_s)
-	if _, err := f.Seek(offsetInodo, 0); err != nil {
-		return fmt.Errorf("error al posicionar inodo: %v", err)
-	}
-	if err := binary.Write(f, binary.LittleEndian, &ino); err != nil {
-		return fmt.Errorf("error al escribir inodo: %v", err)
-	}
-
-	offsetBitmapInodo := int64(sb.S_bm_inode_start) + int64(nuevoInodo)
-	if _, err := f.Seek(offsetBitmapInodo, 0); err != nil {
-		return err
-	}
-	if _, err := f.Write([]byte{1}); err != nil {
-		return err
-	}
-
-	if err := agregarEntradaDirectorio(f, sb, &inodoPadre, inodoPadreNum, nombreArchivo, nuevoInodo); err != nil {
-		return fmt.Errorf("error al agregar entrada al directorio padre: %v", err)
-	}
-
-	if _, err := f.Seek(int64(partStart), 0); err != nil {
-		return err
-	}
-	if err := binary.Write(f, binary.LittleEndian, sb); err != nil {
-		return fmt.Errorf("error al actualizar superbloque: %v", err)
-	}
-
-	fmt.Printf("  Archivo creado: %s (inodo: %d, tamaño: %d bytes)\n", ruta, nuevoInodo, len(contenido))
-	return nil
+func crearBloqueDirectorioRaiz(f *os.File, sb *structs.SuperBloque) error {
+    var dir structs.BCarpeta
+    
+    for i := range dir.B_content {
+        dir.B_content[i].B_inodo = -1
+        for j := range dir.B_content[i].B_name {
+            dir.B_content[i].B_name[j] = 0
+        }
+    }
+    
+    dir.B_content[0].B_inodo = 0
+    copy(dir.B_content[0].B_name[:], ".")
+    
+    dir.B_content[1].B_inodo = 0
+    copy(dir.B_content[1].B_name[:], "..")
+    
+    dir.B_content[2].B_inodo = 1
+    copy(dir.B_content[2].B_name[:], "home")
+    
+    offset := int64(sb.S_block_start) + 0*int64(sb.S_block_s)
+    if _, err := f.Seek(offset, 0); err != nil {
+        return err
+    }
+    
+    return binary.Write(f, binary.LittleEndian, &dir)
 }
 
-func escribirContenidoArchivo(f *os.File, sb *structs.SuperBloque, partStart int32, ino structs.Inodo, inodoNum int32, ruta, contenido string) error {
-	data := []byte(contenido)
-	ino.I_s = int32(len(data))
-	ahora := time.Now().Format("2006-01-02 15:04")
-	copy(ino.I_mtime[:], ahora)
+func crearInodoHome(f *os.File, sb *structs.SuperBloque) error {
+    var ino structs.Inodo
+    ino.I_uid = 1
+    ino.I_gid = 1
+    ino.I_s = int32(binary.Size(structs.BCarpeta{}))
+    t := fecha17()
+    copy(ino.I_atime[:], t)
+    copy(ino.I_ctime[:], t)
+    copy(ino.I_mtime[:], t)
+    
+    for i := range ino.I_block {
+        ino.I_block[i] = -1
+    }
+    ino.I_block[0] = 1
+    
+    ino.I_type[0] = 0
+    copy(ino.I_perm[:], "755")
+    
+    offset := int64(sb.S_inode_start) + 1*int64(sb.S_inode_s)
+    if _, err := f.Seek(offset, 0); err != nil {
+        return err
+    }
+    
+    return binary.Write(f, binary.LittleEndian, &ino)
+}
 
-	totalBloques := (len(data) + 63) / 64
-	if totalBloques > 12 {
-		totalBloques = 12
-	}
+func crearBloqueDirectorioHome(f *os.File, sb *structs.SuperBloque) error {
+    var dir structs.BCarpeta
+    
+    for i := range dir.B_content {
+        dir.B_content[i].B_inodo = -1
+        for j := range dir.B_content[i].B_name {
+            dir.B_content[i].B_name[j] = 0
+        }
+    }
+    
+    dir.B_content[0].B_inodo = 1
+    copy(dir.B_content[0].B_name[:], ".")
+    
+    dir.B_content[1].B_inodo = 0
+    copy(dir.B_content[1].B_name[:], "..")
+    
+    dir.B_content[2].B_inodo = 2
+    copy(dir.B_content[2].B_name[:], "users.txt")
+    
+    offset := int64(sb.S_block_start) + 1*int64(sb.S_block_s)
+    if _, err := f.Seek(offset, 0); err != nil {
+        return err
+    }
+    
+    return binary.Write(f, binary.LittleEndian, &dir)
+}
 
-	for i := 0; i < totalBloques; i++ {
-		blockIdx := ino.I_block[i]
-		
-		if blockIdx == -1 {
-			blockIdx = int32(sb.S_first_blo)
-			sb.S_first_blo++
-			sb.S_free_blocks_count--
-			ino.I_block[i] = blockIdx
+func crearInodoUsersTxt(f *os.File, sb *structs.SuperBloque) error {
+    contenido := "1,G,root\n1,U,root,root,123\n"
+    
+    var ino structs.Inodo
+    ino.I_uid = 1
+    ino.I_gid = 1
+    ino.I_s = int32(len(contenido))
+    t := fecha17()
+    copy(ino.I_atime[:], t)
+    copy(ino.I_ctime[:], t)
+    copy(ino.I_mtime[:], t)
+    
+    for i := range ino.I_block {
+        ino.I_block[i] = -1
+    }
+    ino.I_block[0] = 2
+    
+    ino.I_type[0] = 1
+    copy(ino.I_perm[:], "644")
+    
+    offset := int64(sb.S_inode_start) + 2*int64(sb.S_inode_s)
+    if _, err := f.Seek(offset, 0); err != nil {
+        return err
+    }
+    
+    return binary.Write(f, binary.LittleEndian, &ino)
+}
 
-			offsetBitmap := int64(sb.S_bm_block_start) + int64(blockIdx)
-			if _, err := f.Seek(offsetBitmap, 0); err != nil {
-				return err
-			}
-			if _, err := f.Write([]byte{1}); err != nil {
-				return err
-			}
-		}
+func crearBloqueUsersTxt(f *os.File, sb *structs.SuperBloque) error {
+    contenido := "1,G,root\n1,U,root,root,123\n"
+    
+    var archivo structs.BArchivo
+    copy(archivo.B_content[:], []byte(contenido))
+    
+    offset := int64(sb.S_block_start) + 2*int64(sb.S_block_s)
+    if _, err := f.Seek(offset, 0); err != nil {
+        return err
+    }
+    
+    return binary.Write(f, binary.LittleEndian, &archivo)
+}
 
-		var block structs.BArchivo
-		inicio := i * 64
-		fin := min((i+1)*64, len(data))
-		copy(block.B_content[:], data[inicio:fin])
+func crearDirectorioRecuperacion(f *os.File, sb *structs.SuperBloque, parentIno int32, name string) (int32, error) {
+    idxIno, err := allocInode(f, sb)
+    if err != nil {
+        return -1, err
+    }
+    idxBlk, err := allocBlock(f, sb)
+    if err != nil {
+        return -1, err
+    }
 
-		if err := structs.EscribirBloqueArchivo(f, sb, partStart, blockIdx, &block, "write", ruta); err != nil {
-			return fmt.Errorf("error al escribir bloque %d: %v", i, err)
-		}
-	}
+    var ino structs.Inodo
+    ino.I_uid = 1
+    ino.I_gid = 1
+    ino.I_s = 0
+    t := fecha17()
+    copy(ino.I_atime[:], t)
+    copy(ino.I_ctime[:], t)
+    copy(ino.I_mtime[:], t)
+    for i := range ino.I_block {
+        ino.I_block[i] = -1
+    }
+    ino.I_block[0] = idxBlk
+    ino.I_type[0] = 0
+    copy(ino.I_perm[:], "755")
+    if err := writeInode(f, sb, idxIno, &ino); err != nil {
+        return -1, err
+    }
 
-	offsetInodo := int64(sb.S_inode_start) + int64(inodoNum)*int64(sb.S_inode_s)
-	if _, err := f.Seek(offsetInodo, 0); err != nil {
-		return fmt.Errorf("error al actualizar inodo: %v", err)
-	}
-	if err := binary.Write(f, binary.LittleEndian, &ino); err != nil {
-		return fmt.Errorf("error al escribir inodo actualizado: %v", err)
-	}
+    var dir structs.BCarpeta
+    for i := range dir.B_content {
+        dir.B_content[i].B_inodo = -1
+        for j := range dir.B_content[i].B_name {
+            dir.B_content[i].B_name[j] = 0
+        }
+    }
+    dir.B_content[0].B_inodo = idxIno
+    copy(dir.B_content[0].B_name[:], ".")
+    dir.B_content[1].B_inodo = parentIno
+    copy(dir.B_content[1].B_name[:], "..")
+    if err := writeDirBlock(f, sb, idxBlk, &dir); err != nil {
+        return -1, err
+    }
 
-	if _, err := f.Seek(int64(partStart), 0); err != nil {
-		return err
-	}
-	if err := binary.Write(f, binary.LittleEndian, sb); err != nil {
-		return fmt.Errorf("error al actualizar superbloque: %v", err)
-	}
+    if err := addDirEntry(f, sb, parentIno, name, idxIno); err != nil {
+        return -1, err
+    }
+    return idxIno, nil
+}
 
-	fmt.Printf("  Archivo modificado: %s (tamaño: %d bytes)\n", ruta, len(contenido))
-	return nil
+func recuperarMkdir(f *os.File, sb *structs.SuperBloque, partStart int32, ruta string) error {
+    if ruta == "" || ruta == "/" {
+        return nil
+    }
+
+    partes := splitPathComponents(ruta)
+    if len(partes) == 0 {
+        return nil
+    }
+
+    currentIno := int32(0)
+
+    for _, parte := range partes {
+        childIno, err := findEntryInDir(f, sb, currentIno, parte)
+        if err != nil {
+            childInoInt32, err := crearDirectorioRecuperacion(f, sb, currentIno, parte)
+            if err != nil {
+                return fmt.Errorf("error al crear directorio %s: %v", parte, err)
+            }
+            childIno = int(childInoInt32)
+            fmt.Printf("  Directorio creado: %s (inodo: %d)\n", parte, childInoInt32)
+        }
+        currentIno = int32(childIno)
+    }
+
+    return nil
+}
+
+func recuperarMkfile(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    return recuperarWrite(f, sb, partStart, ruta, contenido)
+}
+
+func recuperarWrite(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    if ruta == "" || ruta == "/" {
+        return fmt.Errorf("ruta inválida para archivo")
+    }
+
+    partes := splitPathComponents(ruta)
+    if len(partes) == 0 {
+        return fmt.Errorf("ruta inválida")
+    }
+
+    dirParts := partes[:len(partes)-1]
+    currentIno := int32(0)
+
+    for _, parte := range dirParts {
+        childIno, err := findEntryInDir(f, sb, currentIno, parte)
+        if err != nil {
+            childInoInt32, err := crearDirectorioRecuperacion(f, sb, currentIno, parte)
+            if err != nil {
+                return fmt.Errorf("error al crear directorio padre %s: %v", parte, err)
+            }
+            childIno = int(childInoInt32)
+        }
+        currentIno = int32(childIno)
+    }
+
+    nombreArchivo := partes[len(partes)-1]
+    
+    existingIno, err := findEntryInDir(f, sb, currentIno, nombreArchivo)
+    if err == nil {
+        inodo, err := ReadInode(f, sb, int32(existingIno))
+        if err != nil {
+            return fmt.Errorf("error al leer inodo existente: %v", err)
+        }
+        
+        if inodo.I_type[0] != 1 {
+            return fmt.Errorf("la ruta existe pero no es un archivo")
+        }
+
+        return actualizarContenidoArchivo(f, sb, int32(existingIno), contenido)
+    }
+
+    return crearArchivoConContenido(f, sb, currentIno, nombreArchivo, contenido)
+}
+
+func recuperarRemove(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    fmt.Printf("Recuperando remove: %s\n", ruta)
+    
+    inodoIdx, err := FindInodeByPath(f, sb, ruta)
+    if err != nil {
+        fmt.Printf("  Archivo no encontrado para eliminar: %s\n", ruta)
+        return nil
+    }
+    
+    inodoPadre, nombreArchivo, err := buscarPadreYNombre(f, sb, ruta)
+    if err != nil {
+        return fmt.Errorf("error al buscar padre: %v", err)
+    }
+    
+    if err := eliminarEntradaDirectorio(f, sb, inodoPadre, nombreArchivo); err != nil {
+        return fmt.Errorf("error al eliminar entrada del directorio: %v", err)
+    }
+    
+    if err := liberarInodoYBloques(f, sb, inodoIdx); err != nil {
+        return fmt.Errorf("error al liberar inodo y bloques: %v", err)
+    }
+    
+    fmt.Printf("  Archivo eliminado: %s (inodo: %d)\n", ruta, inodoIdx)
+    return nil
+}
+
+func eliminarEntradaDirectorio(f *os.File, sb *structs.SuperBloque, inodoPadre int32, nombre string) error {
+    inodo, err := ReadInode(f, sb, inodoPadre)
+    if err != nil {
+        return err
+    }
+    
+    for i := 0; i < len(inodo.I_block); i++ {
+        if inodo.I_block[i] == -1 {
+            continue
+        }
+        
+        dir, err := ReadDirBlock(f, sb, inodo.I_block[i])
+        if err != nil {
+            continue
+        }
+        
+        for j := range dir.B_content {
+            entryNombre := strings.TrimRight(string(dir.B_content[j].B_name[:]), "\x00")
+            if entryNombre == nombre {
+                dir.B_content[j].B_inodo = -1
+                for k := range dir.B_content[j].B_name {
+                    dir.B_content[j].B_name[k] = 0
+                }
+                
+                offset := int64(sb.S_block_start) + int64(inodo.I_block[i])*int64(sb.S_block_s)
+                if _, err := f.Seek(offset, 0); err != nil {
+                    return err
+                }
+                return binary.Write(f, binary.LittleEndian, &dir)
+            }
+        }
+    }
+    
+    return fmt.Errorf("entrada no encontrada en directorio")
+}
+
+func liberarInodoYBloques(f *os.File, sb *structs.SuperBloque, inodoIdx int32) error {
+    inodo, err := ReadInode(f, sb, inodoIdx)
+    if err != nil {
+        return err
+    }
+    
+    for i := 0; i < len(inodo.I_block); i++ {
+        if inodo.I_block[i] != -1 {
+            if err := freeBlock(f, sb, inodo.I_block[i]); err != nil {
+                return err
+            }
+            inodo.I_block[i] = -1
+        }
+    }
+    
+    if err := freeInode(f, sb, inodoIdx); err != nil {
+        return err
+    }
+    
+    return nil
+}
+
+func recuperarEdit(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    fmt.Printf("Recuperando edit: %s\n", ruta)
+    
+    if strings.HasPrefix(contenido, "/") {
+        contenidoLeido, err := structs.LeerArchivoDeFSFromFile(f, sb, partStart, contenido)
+        if err != nil {
+            fmt.Printf("  No se pudo leer archivo fuente %s: %v\n", contenido, err)
+            return recuperarWrite(f, sb, partStart, ruta, "[contenido no disponible]")
+        }
+        return recuperarWrite(f, sb, partStart, ruta, contenidoLeido)
+    }
+    
+    return recuperarWrite(f, sb, partStart, ruta, contenido)
+}
+
+func recuperarRename(f *os.File, sb *structs.SuperBloque, partStart int32, rutaVieja, nuevoNombre string) error {
+    fmt.Printf("Recuperando rename: %s -> %s\n", rutaVieja, nuevoNombre)
+    
+    inodoIdx, err := FindInodeByPath(f, sb, rutaVieja)
+    if err != nil {
+        partes := splitPathComponents(rutaVieja)
+        if len(partes) == 0 {
+            return fmt.Errorf("ruta inválida")
+        }
+        
+        partes[len(partes)-1] = nuevoNombre
+        rutaNueva := "/" + strings.Join(partes, "/")
+        
+        fmt.Printf("Recurso original no encontrado, creando nuevo: %s\n", rutaNueva)
+        if strings.Contains(rutaNueva, ".") {
+            return recuperarWrite(f, sb, partStart, rutaNueva, "[contenido renombrado]")
+        }
+        return recuperarMkdir(f, sb, partStart, rutaNueva)
+    }
+    
+    inodoPadre, _, err := buscarPadreYNombre(f, sb, rutaVieja)
+    if err != nil {
+        return err
+    }
+    
+    return actualizarNombreEnPadre(f, sb, inodoPadre, inodoIdx, nuevoNombre)
+}
+
+func recuperarCopy(f *os.File, sb *structs.SuperBloque, partStart int32, destino, origen string) error {
+    fmt.Printf("Recuperando copy: %s -> %s\n", origen, destino)
+    
+    inodoDestino, _, err := structs.BuscarInodoPorRuta_(f, sb, destino)
+    if err == nil && structs.EsCarpeta(inodoDestino) {
+        nombreOrigen := obtenerNombreRuta(origen)
+        destino = destino + "/" + nombreOrigen
+    }
+    
+    inodoOrigen, _, err := structs.BuscarInodoPorRuta_(f, sb, origen)
+    if err != nil {
+        fmt.Printf("  Origen no encontrado: %s\n", origen)
+        return nil
+    }
+    
+    if structs.EsCarpeta(inodoOrigen) {
+        return copiarRecursivoRecuperacion(f, sb, partStart, origen, destino)
+    } else {
+        contenido, err := leerContenidoArchivo(f, sb, inodoOrigen)
+        if err != nil {
+            return err
+        }
+        return recuperarWrite(f, sb, partStart, destino, string(contenido))
+    }
+}
+
+func recuperarMove(f *os.File, sb *structs.SuperBloque, partStart int32, origen, destino string) error {
+    fmt.Printf("Recuperando move: %s -> %s\n", origen, destino)
+    
+    inodoDestino, _, err := structs.BuscarInodoPorRuta_(f, sb, destino)
+    if err == nil && structs.EsCarpeta(inodoDestino) {
+        nombreArchivo := obtenerNombreRuta(origen)
+        destino = destino + "/" + nombreArchivo
+    }
+    
+    err = recuperarCopy(f, sb, partStart, destino, origen)
+    if err != nil {
+        return err
+    }
+    
+    if err := recuperarRemove(f, sb, partStart, origen, ""); err != nil {
+        fmt.Printf("  No se pudo eliminar origen después del move: %v\n", err)
+    }
+    
+    fmt.Printf("  Move completado: %s -> %s\n", origen, destino)
+    return nil
+}
+
+func recuperarChown(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, usuario string) error {
+    fmt.Printf("Recuperando chown: %s -> %s\n", ruta, usuario)
+    
+    inodo, idx, err := structs.BuscarInodoPorRuta_(f, sb, ruta)
+    if err != nil {
+        fmt.Printf("  Ruta no encontrada: %s\n", ruta)
+        return nil
+    }
+    
+    usuarios, err := structs.LeerArchivoDeFSFromFile(f, sb, partStart, "/home/users.txt")
+    if err != nil {
+        fmt.Printf("  No se pudo leer users.txt: %v\n", err)
+        return nil
+    }
+    
+    uidNuevo := int32(1)
+    lines := strings.Split(usuarios, "\n")
+    for _, line := range lines {
+        campos := strings.Split(line, ",")
+        if len(campos) >= 4 && campos[1] == "U" && campos[3] == usuario {
+            if uid, err := strconv.Atoi(campos[0]); err == nil {
+                uidNuevo = int32(uid)
+                break
+            }
+        }
+    }
+    
+    inodo.I_uid = uidNuevo
+    
+    offset := int64(sb.S_inode_start) + int64(idx)*int64(sb.S_inode_s)
+    if _, err := f.Seek(offset, 0); err != nil {
+        return err
+    }
+    if err := binary.Write(f, binary.LittleEndian, &inodo); err != nil {
+        return err
+    }
+    
+    fmt.Printf("  Propietario actualizado: %s -> UID:%d\n", ruta, uidNuevo)
+    return nil
+}
+
+func recuperarChmod(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, permisos string) error {
+    fmt.Printf("Recuperando chmod: %s -> %s\n", ruta, permisos)
+    
+    if len(permisos) != 3 {
+        fmt.Printf("  Permisos inválidos: %s\n", permisos)
+        return nil
+    }
+    
+    inodo, idx, err := structs.BuscarInodoPorRuta_(f, sb, ruta)
+    if err != nil {
+        fmt.Printf("  Ruta no encontrada: %s\n", ruta)
+        return nil
+    }
+    
+    perms := [3]byte{}
+    for i := 0; i < 3; i++ {
+        val, err := strconv.Atoi(string(permisos[i]))
+        if err != nil || val < 0 || val > 7 {
+            fmt.Printf("  Permiso inválido: %c\n", permisos[i])
+            return nil
+        }
+        perms[i] = byte(val)
+    }
+    
+    inodo.I_perm[0] = perms[0]
+    inodo.I_perm[1] = perms[1]
+    inodo.I_perm[2] = perms[2]
+    
+    offset := int64(sb.S_inode_start) + int64(idx)*int64(sb.S_inode_s)
+    if _, err := f.Seek(offset, 0); err != nil {
+        return err
+    }
+    if err := binary.Write(f, binary.LittleEndian, &inodo); err != nil {
+        return err
+    }
+    
+    fmt.Printf("  Permisos actualizados: %s -> %s\n", ruta, permisos)
+    return nil
+}
+
+func crearArchivoConContenido(f *os.File, sb *structs.SuperBloque, dirIno int32, nombre, contenido string) error {
+    idxIno, err := allocInode(f, sb)
+    if err != nil {
+        return err
+    }
+
+    var ino structs.Inodo
+    ino.I_uid = 1
+    ino.I_gid = 1
+    ino.I_s = int32(len(contenido))
+    t := fecha17()
+    copy(ino.I_atime[:], t)
+    copy(ino.I_ctime[:], t)
+    copy(ino.I_mtime[:], t)
+    for i := range ino.I_block {
+        ino.I_block[i] = -1
+    }
+    ino.I_type[0] = 1
+    copy(ino.I_perm[:], "644")
+
+    data := []byte(contenido)
+    totalBloques := (len(data) + 63) / 64
+    if totalBloques > 12 {
+        totalBloques = 12
+    }
+
+    for i := 0; i < totalBloques; i++ {
+        idxBlk, err := allocBlock(f, sb)
+        if err != nil {
+            return err
+        }
+        ino.I_block[i] = idxBlk
+
+        var block structs.BArchivo
+        inicio := i * 64
+        fin := min((i+1)*64, len(data))
+        copy(block.B_content[:], data[inicio:fin])
+
+        offset := int64(sb.S_block_start) + int64(idxBlk)*64
+        if _, err := f.Seek(offset, io.SeekStart); err != nil {
+            return err
+        }
+        if err := binary.Write(f, binary.LittleEndian, &block); err != nil {
+            return err
+        }
+    }
+
+    if err := writeInode(f, sb, idxIno, &ino); err != nil {
+        return err
+    }
+
+    if err := addDirEntry(f, sb, dirIno, nombre, idxIno); err != nil {
+        return err
+    }
+
+    fmt.Printf("  Archivo creado: %s (inodo: %d, tamaño: %d bytes)\n", nombre, idxIno, len(contenido))
+    return nil
+}
+
+func actualizarContenidoArchivo(f *os.File, sb *structs.SuperBloque, inodoIdx int32, contenido string) error {
+    inodo, err := ReadInode(f, sb, inodoIdx)
+    if err != nil {
+        return err
+    }
+
+    for i := 0; i < 12; i++ {
+        if inodo.I_block[i] != -1 {
+            if err := freeBlock(f, sb, inodo.I_block[i]); err != nil {
+                return err
+            }
+            inodo.I_block[i] = -1
+        }
+    }
+
+    data := []byte(contenido)
+    inodo.I_s = int32(len(data))
+    t := fecha17()
+    copy(inodo.I_mtime[:], t)
+
+    totalBloques := (len(data) + 63) / 64
+    if totalBloques > 12 {
+        totalBloques = 12
+    }
+
+    for i := 0; i < totalBloques; i++ {
+        idxBlk, err := allocBlock(f, sb)
+        if err != nil {
+            return err
+        }
+        inodo.I_block[i] = idxBlk
+
+        var block structs.BArchivo
+        inicio := i * 64
+        fin := min((i+1)*64, len(data))
+        copy(block.B_content[:], data[inicio:fin])
+
+        offset := int64(sb.S_block_start) + int64(idxBlk)*64
+        if _, err := f.Seek(offset, io.SeekStart); err != nil {
+            return err
+        }
+        if err := binary.Write(f, binary.LittleEndian, &block); err != nil {
+            return err
+        }
+    }
+
+    if err := writeInode(f, sb, inodoIdx, &inodo); err != nil {
+        return err
+    }
+
+    fmt.Printf("  Archivo actualizado: (inodo: %d, tamaño: %d bytes)\n", inodoIdx, len(contenido))
+    return nil
+}
+
+func copiarRecursivoRecuperacion(f *os.File, sb *structs.SuperBloque, partStart int32, origen, destino string) error {
+    inodoOrigen, _, err := structs.BuscarInodoPorRuta_(f, sb, origen)
+    if err != nil {
+        return err
+    }
+    
+    if !structs.EsCarpeta(inodoOrigen) {
+        contenido, err := leerContenidoArchivo(f, sb, inodoOrigen)
+        if err != nil {
+            return err
+        }
+        return recuperarWrite(f, sb, partStart, destino, string(contenido))
+    }
+
+    if err := recuperarMkdir(f, sb, partStart, destino); err != nil {
+        return err
+    }
+
+    for i := 0; i < len(inodoOrigen.I_block); i++ {
+        if inodoOrigen.I_block[i] == -1 {
+            continue
+        }
+        
+        dir, err := ReadDirBlock(f, sb, inodoOrigen.I_block[i])
+        if err != nil {
+            continue
+        }
+        
+        for _, entry := range dir.B_content {
+            if entry.B_inodo == -1 {
+                continue
+            }
+            
+            nombreEntry := strings.TrimRight(string(entry.B_name[:]), "\x00")
+            if nombreEntry == "." || nombreEntry == ".." {
+                continue
+            }
+            
+            subOrigen := origen + "/" + nombreEntry
+            subDestino := destino + "/" + nombreEntry
+            
+            if err := copiarRecursivoRecuperacion(f, sb, partStart, subOrigen, subDestino); err != nil {
+                fmt.Printf("Error copiando %s: %v\n", subOrigen, err)
+            }
+        }
+    }
+    
+    return nil
+}
+
+func obtenerNombreRuta(ruta string) string {
+    ruta = strings.Trim(ruta, "/")
+    if ruta == "" {
+        return ""
+    }
+    partes := strings.Split(ruta, "/")
+    return partes[len(partes)-1]
+}
+
+func leerContenidoArchivo(f *os.File, sb *structs.SuperBloque, inodo structs.Inodo) ([]byte, error) {
+    var contenido []byte
+    
+    for i := 0; i < structs.DIRECT_BLOCKS; i++ {
+        if inodo.I_block[i] == -1 {
+            break
+        }
+        
+        bloque, ok := structs.LeerBloqueArchivo(f, sb, inodo.I_block[i])
+        if !ok {
+            continue
+        }
+        
+        contenido = append(contenido, bloque.B_content[:]...)
+    }
+    
+    return contenido, nil
 }
 
 func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+    if a < b {
+        return a
+    }
+    return b
 }
+
 func SimularPerdidaEXT3(f *os.File, sb *structs.SuperBloque, partStart int32) error {
     areas := []struct {
         start int32
@@ -653,4 +1034,337 @@ func RegistrarJournaling(id, operacion, contenido string) error {
     journal.Count++
 
     return structs.EscribirJournal(f, partStart, &journal)
+}
+
+func recuperarMkgrp(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    fmt.Printf("Recuperando mkgrp: %s\n", contenido)
+    
+    nombreGrupo := contenido
+    
+    contenidoActual, err := structs.LeerArchivoDeFSFromFile(f, sb, partStart, "/home/users.txt")
+    if err != nil {
+        return fmt.Errorf("no se pudo leer users.txt: %v", err)
+    }
+    
+    if grupoExisteEnRecuperacion(contenidoActual, nombreGrupo) {
+        fmt.Printf("  Grupo ya existe: %s\n", nombreGrupo)
+        return nil
+    }
+    
+    nuevoID := obtenerSiguienteIDGrupoRecuperacion(contenidoActual)
+    nuevaLinea := fmt.Sprintf("%d,G,%s\n", nuevoID, nombreGrupo)
+    
+    nuevoContenido := asegurarNuevaLineaFinalRecuperacion(contenidoActual) + nuevaLinea
+    
+    return actualizarUsersTxt(f, sb, partStart, nuevoContenido)
+}
+
+func recuperarRmgrp(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    fmt.Printf("Recuperando rmgrp: %s\n", contenido)
+    
+    nombreGrupo := contenido
+    
+    contenidoActual, err := structs.LeerArchivoDeFSFromFile(f, sb, partStart, "/home/users.txt")
+    if err != nil {
+        return fmt.Errorf("no se pudo leer users.txt: %v", err)
+    }
+    
+    lineas := strings.Split(contenidoActual, "\n")
+    encontrado := false
+    
+    for i, linea := range lineas {
+        l := strings.TrimSpace(linea)
+        if l == "" {
+            continue
+        }
+        campos := strings.Split(l, ",")
+        if len(campos) < 3 {
+            continue
+        }
+        id := strings.TrimSpace(campos[0])
+        tipo := strings.TrimSpace(campos[1])
+        nombre := strings.TrimSpace(campos[2])
+        
+        if tipo == "G" && nombre == nombreGrupo && id != "0" {
+            campos[0] = "0"
+            lineas[i] = strings.Join(campos, ",")
+            encontrado = true
+            break
+        }
+    }
+    
+    if !encontrado {
+        fmt.Printf("  Grupo no encontrado: %s\n", nombreGrupo)
+        return nil
+    }
+    
+    nuevoContenido := strings.Join(lineas, "\n")
+    if !strings.HasSuffix(nuevoContenido, "\n") {
+        nuevoContenido += "\n"
+    }
+    
+    return actualizarUsersTxt(f, sb, partStart, nuevoContenido)
+}
+
+func recuperarMkusr(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    fmt.Printf("Recuperando mkusr: %s\n", contenido)
+    
+    partes := strings.Split(contenido, ",")
+    if len(partes) < 3 {
+        return fmt.Errorf("contenido inválido para mkusr: %s", contenido)
+    }
+    
+    grupo := strings.TrimSpace(partes[0])
+    usuario := strings.TrimSpace(partes[1])
+    password := strings.TrimSpace(partes[2])
+    
+    contenidoActual, err := structs.LeerArchivoDeFSFromFile(f, sb, partStart, "/home/users.txt")
+    if err != nil {
+        return fmt.Errorf("no se pudo leer users.txt: %v", err)
+    }
+    
+    if !grupoExisteActivoRecuperacion(contenidoActual, grupo) {
+        return fmt.Errorf("el grupo '%s' no existe", grupo)
+    }
+    
+    if usuarioExisteActivoRecuperacion(contenidoActual, usuario) {
+        fmt.Printf("  Usuario ya existe: %s\n", usuario)
+        return nil
+    }
+    
+    nuevoID := obtenerSiguienteIDUsuarioRecuperacion(contenidoActual)
+    nuevaLinea := fmt.Sprintf("%d,U,%s,%s,%s\n", nuevoID, grupo, usuario, password)
+    
+    nuevoContenido := asegurarNuevaLineaFinalRecuperacion(contenidoActual) + nuevaLinea
+    
+    return actualizarUsersTxt(f, sb, partStart, nuevoContenido)
+}
+
+func recuperarRmusr(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    fmt.Printf("Recuperando rmusr: %s\n", contenido)
+    
+    nombreUsuario := contenido
+    
+    contenidoActual, err := structs.LeerArchivoDeFSFromFile(f, sb, partStart, "/home/users.txt")
+    if err != nil {
+        return fmt.Errorf("no se pudo leer users.txt: %v", err)
+    }
+    
+    lineas := strings.Split(contenidoActual, "\n")
+    encontrado := false
+    
+    for i, linea := range lineas {
+        l := strings.TrimSpace(linea)
+        if l == "" {
+            continue
+        }
+        campos := strings.Split(l, ",")
+        if len(campos) < 5 {
+            continue
+        }
+        id := strings.TrimSpace(campos[0])
+        tipo := strings.TrimSpace(campos[1])
+        usuario := strings.TrimSpace(campos[3])
+        
+        if tipo == "U" && usuario == nombreUsuario && id != "0" {
+            campos[0] = "0"
+            lineas[i] = strings.Join(campos, ",")
+            encontrado = true
+            break
+        }
+    }
+    
+    if !encontrado {
+        fmt.Printf("  Usuario no encontrado: %s\n", nombreUsuario)
+        return nil
+    }
+    
+    nuevoContenido := strings.Join(lineas, "\n")
+    if !strings.HasSuffix(nuevoContenido, "\n") {
+        nuevoContenido += "\n"
+    }
+    
+    return actualizarUsersTxt(f, sb, partStart, nuevoContenido)
+}
+
+func recuperarChgrp(f *os.File, sb *structs.SuperBloque, partStart int32, ruta, contenido string) error {
+    fmt.Printf("Recuperando chgrp: %s\n", contenido)
+    
+    partes := strings.Split(contenido, "->")
+    if len(partes) < 2 {
+        return fmt.Errorf("contenido inválido para chgrp: %s", contenido)
+    }
+    
+    usuario := strings.TrimSpace(partes[0])
+    nuevoGrupo := strings.TrimSpace(partes[1])
+    
+    contenidoActual, err := structs.LeerArchivoDeFSFromFile(f, sb, partStart, "/home/users.txt")
+    if err != nil {
+        return fmt.Errorf("no se pudo leer users.txt: %v", err)
+    }
+    
+    if !grupoExisteActivoRecuperacion(contenidoActual, nuevoGrupo) {
+        return fmt.Errorf("el grupo '%s' no existe", nuevoGrupo)
+    }
+    
+    lineas := strings.Split(contenidoActual, "\n")
+    actualizado := false
+    
+    for i, linea := range lineas {
+        l := strings.TrimSpace(linea)
+        if l == "" {
+            continue
+        }
+        campos := strings.Split(l, ",")
+        if len(campos) < 5 {
+            continue
+        }
+        id := strings.TrimSpace(campos[0])
+        tipo := strings.TrimSpace(campos[1])
+        usuarioActual := strings.TrimSpace(campos[3])
+        password := strings.TrimSpace(campos[4])
+        
+        if tipo == "U" && usuarioActual == usuario && id != "0" {
+            campos[2] = nuevoGrupo
+            lineas[i] = strings.Join([]string{id, "U", nuevoGrupo, usuarioActual, password}, ",")
+            actualizado = true
+            break
+        }
+    }
+    
+    if !actualizado {
+        return fmt.Errorf("no se pudo actualizar el usuario '%s'", usuario)
+    }
+    
+    nuevoContenido := strings.Join(lineas, "\n")
+    if !strings.HasSuffix(nuevoContenido, "\n") {
+        nuevoContenido += "\n"
+    }
+    
+    return actualizarUsersTxt(f, sb, partStart, nuevoContenido)
+}
+
+// Funciones auxiliares para la recuperación
+func grupoExisteEnRecuperacion(contenido, grupo string) bool {
+    lineas := strings.Split(contenido, "\n")
+    for _, linea := range lineas {
+        linea = strings.TrimSpace(linea)
+        if linea == "" {
+            continue
+        }
+        campos := strings.Split(linea, ",")
+        if len(campos) >= 3 {
+            id := strings.TrimSpace(campos[0])
+            tipo := strings.TrimSpace(campos[1])
+            nombre := strings.TrimSpace(campos[2])
+            if tipo == "G" && nombre == grupo && id != "0" {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+func grupoExisteActivoRecuperacion(contenido, grupo string) bool {
+    lineas := strings.Split(contenido, "\n")
+    for _, l := range lineas {
+        l = strings.TrimSpace(l)
+        if l == "" {
+            continue
+        }
+        p := strings.Split(l, ",")
+        if len(p) < 3 {
+            continue
+        }
+        id := strings.TrimSpace(p[0])
+        tipo := strings.TrimSpace(p[1])
+        nombre := strings.TrimSpace(p[2])
+        if tipo == "G" && nombre == grupo && id != "0" {
+            return true
+        }
+    }
+    return false
+}
+
+func usuarioExisteActivoRecuperacion(contenido, usuario string) bool {
+    lineas := strings.Split(contenido, "\n")
+    for _, l := range lineas {
+        l = strings.TrimSpace(l)
+        if l == "" {
+            continue
+        }
+        p := strings.Split(l, ",")
+        if len(p) < 5 {
+            continue
+        }
+        id := strings.TrimSpace(p[0])
+        tipo := strings.TrimSpace(p[1])
+        nombreUsuario := strings.TrimSpace(p[3])
+        if tipo == "U" && nombreUsuario == usuario && id != "0" {
+            return true
+        }
+    }
+    return false
+}
+
+func obtenerSiguienteIDGrupoRecuperacion(contenido string) int {
+    maxID := 0
+    for _, l := range strings.Split(contenido, "\n") {
+        l = strings.TrimSpace(l)
+        if l == "" {
+            continue
+        }
+        p := strings.Split(l, ",")
+        if len(p) < 2 {
+            continue
+        }
+        if strings.TrimSpace(p[1]) != "G" {
+            continue
+        }
+        idStr := strings.TrimSpace(p[0])
+        if idStr == "0" {
+            continue
+        }
+        if id, err := strconv.Atoi(idStr); err == nil && id > maxID {
+            maxID = id
+        }
+    }
+    return maxID + 1
+}
+
+func obtenerSiguienteIDUsuarioRecuperacion(contenido string) int {
+    maxID := 0
+    for _, l := range strings.Split(contenido, "\n") {
+        l = strings.TrimSpace(l)
+        if l == "" {
+            continue
+        }
+        p := strings.Split(l, ",")
+        if len(p) < 5 {
+            continue
+        }
+        idStr := strings.TrimSpace(p[0])
+        tipo := strings.TrimSpace(p[1])
+        if tipo != "U" || idStr == "0" {
+            continue
+        }
+        if id, err := strconv.Atoi(idStr); err == nil && id > maxID {
+            maxID = id
+        }
+    }
+    return maxID + 1
+}
+
+func asegurarNuevaLineaFinalRecuperacion(s string) string {
+    if s == "" {
+        return ""
+    }
+    if strings.HasSuffix(s, "\n") {
+        return s
+    }
+    return s + "\n"
+}
+
+func actualizarUsersTxt(f *os.File, sb *structs.SuperBloque, partStart int32, contenido string) error {
+    return recuperarWrite(f, sb, partStart, "/home/users.txt", contenido)
 }

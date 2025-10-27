@@ -85,7 +85,7 @@ func IniciarAPIServer(port string) {
 }
 
 func ListDisksHandler(w http.ResponseWriter, r *http.Request) {
-    disks, err := utils.ListDisks("/home/emanuel/Calificacion_MIA/Discos")
+    disks, err := utils.ListDisks("/home/ubuntu/Resultado/Calificacion_MIA/Discos")
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return

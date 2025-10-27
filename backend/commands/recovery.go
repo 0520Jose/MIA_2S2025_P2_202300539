@@ -6,10 +6,21 @@ import (
     "strings"
 )
 
+var Recuperado int32 = 0
+
 func Recovery(params map[string]string) string {
     id, ok := params["-id"]
     if !ok || strings.TrimSpace(id) == "" {
         return "Error: Falta el parámetro obligatorio -id"
+    }
+
+    usuarioActual = &UserSession{
+        Username:    "root",
+        PartitionID: id,
+        Group:       "root",
+        UID:         1,
+        GID:         1,
+        PartID:    id,
     }
 
     f, sb, part, err := structs.SuperBloque_ID(id)
@@ -22,5 +33,6 @@ func Recovery(params map[string]string) string {
     if err != nil {
         return fmt.Sprintf("Error al recuperar sistema: %v", err)
     }
+    Recuperado = 1
     return fmt.Sprintf("¡Sistema de archivos con id %s recuperado exitosamente!", id)
 }

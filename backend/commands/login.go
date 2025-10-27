@@ -16,6 +16,7 @@ type UserSession struct {
     Group       string
     UID         int
     GID         int
+    PartID     string
 }
 
 func Login(params map[string]string) string {
@@ -102,6 +103,7 @@ func Login(params map[string]string) string {
         Group:       grupoNombre,
         UID:         uidInt,
         GID:         gidInt,
+        PartID:     id,
     }
     return "Login exitoso"
 }
@@ -119,48 +121,24 @@ func GetCurrentUser() *UserSession {
 }
 
 func LeerArchivoUsersTXT(f *os.File, sb *structs.SuperBloque) (string, error) {
-    ino, err := ReadInode(f, sb, 2)
-    if err != nil {
-        return "", err
-    }
-    
-    if ino.I_type[0] != 1 {
-        return "", fmt.Errorf("users.txt no es un archivo")
-    }
-    
-    var contenido []byte
-    remaining := int(ino.I_s)
-    
-    for i := 0; i < DIRECT_BLOCKS && remaining > 0; i++ {
-        if ino.I_block[i] == -1 {
-            break
-        }
-        
-        bloque, err := readFileBlock(f, sb, ino.I_block[i])
+        ino, err := ReadInode(f, sb, 2)
         if err != nil {
             return "", err
         }
         
-        chunk := 64
-        if chunk > remaining {
-            chunk = remaining
-        }
-        contenido = append(contenido, bloque.B_content[:chunk]...)
-        remaining -= chunk
-    }
-    
-    if remaining > 0 && ino.I_block[INDIRECT_SIMPLE] != -1 {
-        pointers, err := readPointerBlock(f, sb, ino.I_block[INDIRECT_SIMPLE])
-        if err != nil {
-            return "", err
+        if ino.I_type[0] != 1 {
+            return "", fmt.Errorf("users.txt no es un archivo")
         }
         
-        for i := 0; i < 16 && remaining > 0; i++ {
-            if pointers.B_pointers[i] == -1 {
+        var contenido []byte
+        remaining := int(ino.I_s)
+        
+        for i := 0; i < DIRECT_BLOCKS && remaining > 0; i++ {
+            if ino.I_block[i] == -1 {
                 break
             }
             
-            bloque, err := readFileBlock(f, sb, pointers.B_pointers[i])
+            bloque, err := readFileBlock(f, sb, ino.I_block[i])
             if err != nil {
                 return "", err
             }
@@ -172,9 +150,33 @@ func LeerArchivoUsersTXT(f *os.File, sb *structs.SuperBloque) (string, error) {
             contenido = append(contenido, bloque.B_content[:chunk]...)
             remaining -= chunk
         }
-    }
-    
-    return string(contenido), nil
+        
+        if remaining > 0 && ino.I_block[INDIRECT_SIMPLE] != -1 {
+            pointers, err := readPointerBlock(f, sb, ino.I_block[INDIRECT_SIMPLE])
+            if err != nil {
+                return "", err
+            }
+            
+            for i := 0; i < 16 && remaining > 0; i++ {
+                if pointers.B_pointers[i] == -1 {
+                    break
+                }
+                
+                bloque, err := readFileBlock(f, sb, pointers.B_pointers[i])
+                if err != nil {
+                    return "", err
+                }
+                
+                chunk := 64
+                if chunk > remaining {
+                    chunk = remaining
+                }
+                contenido = append(contenido, bloque.B_content[:chunk]...)
+                remaining -= chunk
+            }
+        }
+        
+        return string(contenido), nil
 }
 
 func readFileBlock(f *os.File, sb *structs.SuperBloque, blockIdx int32) (structs.BArchivo, error) {

@@ -28,8 +28,13 @@ const Main = () => {
     input: useRef(null)
   };
   const navigate = useNavigate();
-  const usuario = Cookies.get('usuario') || 'guest';
+  const [usuario, setUsuario] = useState(Cookies.get('usuario') || 'guest');
   
+  useEffect(() => {
+    const currentUser = Cookies.get('usuario') || 'guest';
+    setUsuario(currentUser);
+  }, []);
+
   useEffect(() => {
     if (refs.terminal.current) {
       refs.terminal.current.scrollTop = refs.terminal.current.scrollHeight;
@@ -81,44 +86,54 @@ const Main = () => {
     refs.fileInput.current?.click();
   }, []);
   
-  const handleLogout = async (e) => {
+  const handleLogout = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true }));
     
-    setTimeout(() => {
-      Cookies.remove('usuario');
-      setState(prev => ({ ...prev, loading: false }));
-    }, 1500);
-
     try {
-          const logoutCommand = `logout`;
+      const logoutCommand = `logout`;
+      
+      const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          comando: logoutCommand 
+        }),
+      });
+
+      const data = await response.json();
+      const output = data.salida || '';
+      
+      if (!output.toLowerCase().includes('error')) {
+        Cookies.remove('usuario');
+        setUsuario('guest');
+        setState(prev => ({ 
+          ...prev, 
+          loading: false,
+          isExecuting: false,
           
-          const response = await fetch('http://localhost:8000/execute', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-              comando: logoutCommand 
-            }),
-          });
-    
-          const data = await response.json();
-          
-          if (data.salida && data.salida.includes('Error')) {
-            setIsLoading(false);
-            return;
-          }
-          setTimeout(() => {
-            navigate('/main');
-            setIsLoading(false);
-          }, 1000);
-    
-        } catch (error) {
-          console.error('Error en login:', error);
-          setError('Error de conexión con el servidor');
-          setIsLoading(false);
-        }
-  };
+          output: [...prev.output, `$ ${logoutCommand}`, output]
+        }));
+      } else {
+        setState(prev => ({ 
+          ...prev, 
+          loading: false,
+          isExecuting: false,
+          output: [...prev.output, `$ ${logoutCommand}`, output]
+        }));
+      }
+
+    } catch (error) {
+      console.error('Error en logout:', error);
+      setState(prev => ({ 
+        ...prev, 
+        loading: false,
+        isExecuting: false,
+        output: [...prev.output, `Error: ${error.message}`]
+      }));
+    }
+  }, []);
 
   const handleLogin = useCallback(() => {
     setState(prev => ({ ...prev, loading: true }));
@@ -338,7 +353,7 @@ const Main = () => {
 
     if (command.toLowerCase().startsWith('journaling -id=')) {
       try {
-        const response = await fetch('http://localhost:8000/execute', {
+        const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ comando: command }),
@@ -397,8 +412,55 @@ const Main = () => {
       return;
     }
 
+    if (command.toLowerCase().includes('login')) {
+      try {
+      const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comando: command }),
+      });
+
+      const data = await response.json();
+      const output = data.salida || '';
+      
+      setTimeout(() => {
+        if (!output.toLowerCase().includes('error')) {
+        const userMatch = command.match(/login\s+-user=(\w+)/i);
+        if (userMatch && userMatch[1]) {
+          const username = userMatch[1];
+          Cookies.set('usuario', username, { expires: 1 });
+          setUsuario(username);
+        }
+        }
+        
+        setState(prev => ({
+        ...prev,
+        output: [...prev.output, output],
+        isExecuting: false,
+        input: ''
+        }));
+      }, Math.random() * 800 + 200);
+
+      } catch (error) {
+      setTimeout(() => {
+        setState(prev => ({
+        ...prev,
+        output: [...prev.output, `Error: ${error.message}`],
+        isExecuting: false,
+        input: ''
+        }));
+      }, 500);
+      }
+      return;
+    }
+
+    if (command.toLowerCase().includes('logout')) {
+      handleLogout();
+      return;
+    }
+
     try {
-      const response = await fetch('http://localhost:8000/execute', {
+      const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comando: command }),
@@ -425,7 +487,7 @@ const Main = () => {
         }));
       }, 500);
     }
-  }, [state.input, state.commandHistory, addToHistory, clearHistory]);
+  }, [state.input, state.commandHistory, addToHistory, clearHistory, handleLogout]);
 
   const handleKeyPress = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

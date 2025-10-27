@@ -847,3 +847,40 @@ func ListaCarpetasFS(id, rutaCarpeta string) ([]InfoArchivo, error) {
 
     return archivos, nil
 }
+
+func LeerArchivoDeFSFromFile(f *os.File, sb *SuperBloque, partStart int32, ruta string) (string, error) {
+    inodo, _, err := BuscarInodoPorRuta_(f, sb, ruta)
+    if err != nil {
+        return "", err
+    }
+    
+    if EsCarpeta(inodo) {
+        return "", fmt.Errorf("la ruta es un directorio, no un archivo")
+    }
+    
+    contenido, err := leerContenidoArchivo(f, sb, inodo)
+    if err != nil {
+        return "", err
+    }
+    
+    return string(contenido), nil
+}
+
+func leerContenidoArchivo(f *os.File, sb *SuperBloque, inodo Inodo) ([]byte, error) {
+    var contenido []byte
+    
+    for i := 0; i < DIRECT_BLOCKS; i++ {
+        if inodo.I_block[i] == -1 {
+            break
+        }
+        
+        bloque, ok := LeerBloqueArchivo(f, sb, inodo.I_block[i])
+        if !ok {
+            continue
+        }
+        
+        contenido = append(contenido, bloque.B_content[:]...)
+    }
+    
+    return contenido, nil
+}

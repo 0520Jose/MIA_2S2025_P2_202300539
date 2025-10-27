@@ -69,7 +69,7 @@ func Copy(params map[string]string) string {
     }
 
     var skipped []string
-    nuevoIdx, err := copiarRecursivo(disk, sb, particion.Part_start, inodoOrigenIdx, inodoDestinoIdx, nombreOrigen, &skipped)
+    nuevoIdx, err := copiarRecursivo(disk, sb, particion.Part_start, inodoOrigenIdx, inodoDestinoIdx, nombreOrigen, rutaDestino, &skipped)
     if err != nil {
         return fmt.Sprintf("Error al copiar: %v", err)
     }
@@ -95,7 +95,7 @@ func Copy(params map[string]string) string {
     return resultado
 }
 
-func copiarRecursivo(f *os.File, sb *structs.SuperBloque, partStart int32, origenIdx, padreDestinoIdx int32, nombre string, skipped *[]string) (int32, error) {
+func copiarRecursivo(f *os.File, sb *structs.SuperBloque, partStart int32, origenIdx, padreDestinoIdx int32, nombre string, ruta string, skipped *[]string) (int32, error) {
     inodoOrigen, err := ReadInode(f, sb, origenIdx)
     if err != nil {
         return -1, err
@@ -189,7 +189,7 @@ func copiarRecursivo(f *os.File, sb *structs.SuperBloque, partStart int32, orige
                     continue
                 }
 
-                hijoIdx, err := copiarRecursivo(f, sb, partStart, entry.B_inodo, nuevoIdx, nombreEntry, skipped)
+                hijoIdx, err := copiarRecursivo(f, sb, partStart, entry.B_inodo, nuevoIdx, nombreEntry, ruta, skipped)
                 if err != nil {
                     fmt.Printf("Advertencia: no se pudo copiar %s: %v\n", nombreEntry, err)
                     continue
@@ -226,7 +226,7 @@ func copiarRecursivo(f *os.File, sb *structs.SuperBloque, partStart int32, orige
             copy(arr[:], bloqueOrigen.B_content[:])
             bloque := structs.BArchivo{B_content: arr}
 
-            if err := structs.EscribirBloqueArchivo(f, sb, partStart, nuevoBlkIdx, &bloque, "write", nombre); err != nil {
+            if err := structs.EscribirBloqueArchivo(f, sb, partStart, nuevoBlkIdx, &bloque, "write", ruta); err != nil {
                 freeBlock(f, sb, nuevoBlkIdx)
                 fmt.Printf("Advertencia: no se pudo escribir bloque de archivo: %v\n", err)
                 continue

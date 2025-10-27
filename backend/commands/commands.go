@@ -51,19 +51,25 @@ func ExecuteCommand(fullCommand string) string {
     case "unmount":
         return Unmount(args)
     case "chown":
-        id := args["-id"]
         path := args["-path"]
-        user := args["-user"]
-        err := Chown(id, path, user, false)
+        user := args["-usuario"]
+        recursive := false
+        if _, ok := args["-r"]; ok {
+            recursive = true
+        }
+        err := Chown(path, user, recursive)
         if err != nil {
             return fmt.Sprintf("Error: %v", err)
         }
         return "Propietario cambiado correctamente"
     case "chmod":
-        id := args["-id"]
         path := args["-path"]
         ugo := args["-ugo"]
-        err := Chmod(id, path, ugo, false)
+        recursive := false
+        if _, ok := args["-r"]; ok {
+            recursive = true
+        }
+        err := Chmod(path, ugo, recursive)
         if err != nil {
             return fmt.Sprintf("Error: %v", err)
         }

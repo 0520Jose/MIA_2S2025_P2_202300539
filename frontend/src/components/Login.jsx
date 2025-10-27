@@ -26,7 +26,7 @@ const Login = () => {
     try {
       const loginCommand = `login -user=${username} -pass=${password} -id=${partitionId}`;
       
-      const response = await fetch('http://localhost:8000/execute', {
+      const response = await fetch('http://ec2-18-223-185-41.us-east-2.compute.amazonaws.com:8000/execute', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

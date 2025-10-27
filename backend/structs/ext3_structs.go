@@ -8,7 +8,7 @@ import (
 
 type Journal struct {
     Count   int32
-    Content [50]Information 
+    Content [300]Information 
 }
 
 type Information struct {
@@ -18,7 +18,7 @@ type Information struct {
     Date      float32
 }
 
-const JournalConstant = 50
+const JournalConstant = 300
 
 
 func SuperBloque_EXT3_ID(id string) (*os.File, *SuperBloqueEXT3, Partition, error) {

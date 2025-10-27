@@ -61,9 +61,15 @@ func Edit(params map[string]string) string {
     if strings.HasPrefix(contenidoArg, "/") {
         dataStr, err := structs.LeerArchivoDeFS(usuarioActual.PartitionID, contenidoArg)
         if err != nil {
-            return "Error al leer archivo fuente en EXT2: " + err.Error()
+            // Si no se encuentra en EXT2, intenta leer desde el sistema de archivos del SO
+            fileData, fileErr := os.ReadFile(contenidoArg)
+            if fileErr != nil {
+                return "Error al leer archivo fuente: " + fileErr.Error()
+            }
+            contenido = string(fileData)
+        } else {
+            contenido = dataStr
         }
-        contenido = dataStr
     } else {
         contenido = contenidoArg
     }
