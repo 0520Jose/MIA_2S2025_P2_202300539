@@ -1,0 +1,372 @@
+package commands
+
+import (
+    "backend/structs"
+    "fmt"
+    "os"
+    "strings"
+)
+
+func Copy(params map[string]string) string {
+    if usuarioActual == nil {
+        return "Error: No hay una sesión activa."
+    }
+
+    rawPath, ok := params["-path"]
+    if !ok || strings.TrimSpace(rawPath) == "" {
+        return "Error: parámetro -path es obligatorio."
+    }
+
+    rawDestino, ok := params["-destino"]
+    if !ok || strings.TrimSpace(rawDestino) == "" {
+        return "Error: parámetro -destino es obligatorio."
+    }
+
+    rutaOrigen := unquoteValue(strings.TrimSpace(rawPath))
+    rutaDestino := unquoteValue(strings.TrimSpace(rawDestino))
+
+    if !strings.HasPrefix(rutaOrigen, "/") {
+        return "Error: -path debe ser ruta absoluta."
+    }
+    if !strings.HasPrefix(rutaDestino, "/") {
+        return "Error: -destino debe ser ruta absoluta."
+    }
+
+    disk, sb, err := CargarSistemaEXT2(usuarioActual.PartitionID)
+    if err != nil {
+        return fmt.Sprintf("Error: %v", err)
+    }
+    defer disk.Close()
+
+    pm := getMountByID(usuarioActual.PartitionID)
+    if pm == nil {
+        return "Error: partición no montada."
+    }
+    particion := pm.Partition
+
+    inodoOrigen, inodoOrigenIdx, err := structs.BuscarInodoPorRuta_(disk, sb, rutaOrigen)
+    if err != nil {
+        return fmt.Sprintf("Error: ruta de origen no existe: %v", err)
+    }
+    if !Permisos(&inodoOrigen, permRead) {
+        return "Error: no tiene permisos de lectura sobre el recurso origen."
+    }
+
+    inodoDestino, inodoDestinoIdx, err := structs.BuscarInodoPorRuta_(disk, sb, rutaDestino)
+    if err != nil {
+        return fmt.Sprintf("Error: ruta de destino no existe: %v", err)
+    }
+    if !structs.EsCarpeta(inodoDestino) {
+        return "Error: el destino debe ser una carpeta."
+    }
+    if !Permisos(&inodoDestino, permWrite) {
+        return "Error: no tiene permisos de escritura sobre la carpeta destino."
+    }
+
+    nombreOrigen := obtenerNombreDeRuta(rutaOrigen)
+    if existeNombreEnDirectorio(disk, sb, &inodoDestino, nombreOrigen, -1) {
+        return fmt.Sprintf("Error: ya existe un recurso con el nombre '%s' en el destino.", nombreOrigen)
+    }
+
+    var skipped []string
+    nuevoIdx, err := copiarRecursivo(disk, sb, particion.Part_start, inodoOrigenIdx, inodoDestinoIdx, nombreOrigen, rutaDestino, &skipped)
+    if err != nil {
+        return fmt.Sprintf("Error al copiar: %v", err)
+    }
+
+    if err := writeSuperBlock(disk, sb, int64(pm.Partition.Part_start)); err != nil {
+        return "Error al actualizar superbloque: " + err.Error()
+    }
+
+    if sb.S_filesystem_type == 3 {
+        operacion := "copy"
+        ruta := rutaDestino
+        contenido := rutaOrigen
+        if err := RegistrarOperacionJournal(disk, sb, particion.Part_start, operacion, ruta, contenido); err != nil {
+            fmt.Printf("Advertencia: no se pudo registrar en journal: %v\n", err)
+        }
+    }
+
+    resultado := fmt.Sprintf("Copia realizada correctamente. Nuevo recurso creado con índice %d.", nuevoIdx)
+    if len(skipped) > 0 {
+        resultado += fmt.Sprintf("\n\nArchivos omitidos por falta de permisos:\n- %s", strings.Join(skipped, "\n- "))
+    }
+
+    return resultado
+}
+
+func copiarRecursivo(f *os.File, sb *structs.SuperBloque, partStart int32, origenIdx, padreDestinoIdx int32, nombre string, ruta string, skipped *[]string) (int32, error) {
+    inodoOrigen, err := ReadInode(f, sb, origenIdx)
+    if err != nil {
+        return -1, err
+    }
+    if !Permisos(&inodoOrigen, permRead) {
+        *skipped = append(*skipped, nombre)
+        return -1, fmt.Errorf("sin permisos de lectura")
+    }
+
+    nuevoIdx, err := allocInode(f, sb)
+    if err != nil {
+        return -1, err
+    }
+
+    nuevoInodo := inodoOrigen
+    nuevoInodo.I_uid = int32(usuarioActual.UID)
+    nuevoInodo.I_gid = int32(usuarioActual.GID)
+
+    t := fecha17()
+    copy(nuevoInodo.I_ctime[:], t)
+    copy(nuevoInodo.I_mtime[:], t)
+
+    for i := range nuevoInodo.I_block {
+        nuevoInodo.I_block[i] = -1
+    }
+
+    if structs.EsCarpeta(inodoOrigen) {
+        nuevoBlkIdx, err := allocBlock(f, sb)
+        if err != nil {
+            freeInode(f, sb, nuevoIdx)
+            return -1, err
+        }
+
+        var dirBlock structs.BCarpeta
+        for i := range dirBlock.B_content {
+            dirBlock.B_content[i].B_inodo = -1
+        }
+        
+        copy(dirBlock.B_content[0].B_name[:], ".")
+        dirBlock.B_content[0].B_inodo = nuevoIdx
+        copy(dirBlock.B_content[1].B_name[:], "..")
+        dirBlock.B_content[1].B_inodo = padreDestinoIdx
+
+        nuevoInodo.I_block[0] = nuevoBlkIdx
+        nuevoInodo.I_s = 0
+
+        if err := writeDirBlock(f, sb, nuevoBlkIdx, &dirBlock); err != nil {
+            freeBlock(f, sb, nuevoBlkIdx)
+            freeInode(f, sb, nuevoIdx)
+            return -1, err
+        }
+
+        if err := writeInode(f, sb, nuevoIdx, &nuevoInodo); err != nil {
+            freeBlock(f, sb, nuevoBlkIdx)
+            freeInode(f, sb, nuevoIdx)
+            return -1, err
+        }
+
+        for i := 0; i < len(inodoOrigen.I_block); i++ {
+            if inodoOrigen.I_block[i] == -1 {
+                continue
+            }
+
+            dirOrigen, err := ReadDirBlock(f, sb, inodoOrigen.I_block[i])
+            if err != nil {
+                fmt.Printf("Advertencia: no se pudo leer bloque de directorio %d: %v\n", inodoOrigen.I_block[i], err)
+                continue
+            }
+
+            for j := 0; j < len(dirOrigen.B_content); j++ {
+                entry := dirOrigen.B_content[j]
+                if entry.B_inodo == -1 {
+                    continue
+                }
+
+                nombreEntry := strings.TrimRight(string(entry.B_name[:]), "\x00")
+                if nombreEntry == "." || nombreEntry == ".." || nombreEntry == "" {
+                    continue
+                }
+
+                esDuplicado := false
+                for k := 0; k < j; k++ {
+                    prevEntry := dirOrigen.B_content[k]
+                    prevNombre := strings.TrimRight(string(prevEntry.B_name[:]), "\x00")
+                    if prevNombre == nombreEntry && prevEntry.B_inodo == entry.B_inodo {
+                        esDuplicado = true
+                        break
+                    }
+                }
+                if esDuplicado {
+                    continue
+                }
+
+                hijoIdx, err := copiarRecursivo(f, sb, partStart, entry.B_inodo, nuevoIdx, nombreEntry, ruta, skipped)
+                if err != nil {
+                    fmt.Printf("Advertencia: no se pudo copiar %s: %v\n", nombreEntry, err)
+                    continue
+                }
+                fmt.Printf("Copiado %s con nuevo índice %d bajo padre %d\n", nombreEntry, hijoIdx, nuevoIdx)
+            }
+        }
+
+    } else {
+        data := []byte{}
+        for i := 0; i < structs.DIRECT_BLOCKS; i++ {
+            if inodoOrigen.I_block[i] == -1 {
+                break
+            }
+            
+            bloqueOrigen, ok := structs.LeerBloqueArchivo(f, sb, inodoOrigen.I_block[i])
+            if !ok {
+                fmt.Printf("Advertencia: no se pudo leer bloque de archivo %d\n", inodoOrigen.I_block[i])
+                continue
+            }
+            
+            nuevoBlkIdx, err := allocBlock(f, sb)
+            if err != nil {
+                for j := 0; j < i; j++ {
+                    if nuevoInodo.I_block[j] != -1 {
+                        freeBlock(f, sb, nuevoInodo.I_block[j])
+                    }
+                }
+                freeInode(f, sb, nuevoIdx)
+                return -1, err
+            }
+            
+            var arr [64]byte
+            copy(arr[:], bloqueOrigen.B_content[:])
+            bloque := structs.BArchivo{B_content: arr}
+
+            if err := structs.EscribirBloqueArchivo(f, sb, partStart, nuevoBlkIdx, &bloque, "write", ruta); err != nil {
+                freeBlock(f, sb, nuevoBlkIdx)
+                fmt.Printf("Advertencia: no se pudo escribir bloque de archivo: %v\n", err)
+                continue
+            }
+            
+            nuevoInodo.I_block[i] = nuevoBlkIdx
+            data = append(data, bloque.B_content[:]...)
+        }
+        nuevoInodo.I_s = int32(len(data))
+
+        if err := writeInode(f, sb, nuevoIdx, &nuevoInodo); err != nil {
+            for _, blk := range nuevoInodo.I_block {
+                if blk != -1 {
+                    freeBlock(f, sb, blk)
+                }
+            }
+            freeInode(f, sb, nuevoIdx)
+            return -1, err
+        }
+    }
+
+    if err := agregarEntradaEnDirectorio(f, sb, padreDestinoIdx, nuevoIdx, nombre); err != nil {
+        eliminarInodoRecursivo(f, sb, nuevoIdx)
+        return -1, err
+    }
+
+    return nuevoIdx, nil
+}
+
+func agregarEntradaEnDirectorioExistente(f *os.File, sb *structs.SuperBloque, dirInodoIdx, childIdx int32, nombre string) error {
+    inodoDir, err := ReadInode(f, sb, dirInodoIdx)
+    if err != nil {
+        return err
+    }
+
+    if len(nombre) > 12 {
+        return fmt.Errorf("nombre demasiado largo (máximo 12 caracteres)")
+    }
+
+    for i := 0; i < len(inodoDir.I_block); i++ {
+        if inodoDir.I_block[i] == -1 {
+            nuevoBlk, err := allocBlock(f, sb)
+            if err != nil {
+                return fmt.Errorf("no se pudo asignar bloque para directorio: %v", err)
+            }
+
+            var nuevoDir structs.BCarpeta
+            for j := range nuevoDir.B_content {
+                nuevoDir.B_content[j].B_inodo = -1
+            }
+            inodoDir.I_block[i] = nuevoBlk
+
+            if err := writeDirBlock(f, sb, nuevoBlk, &nuevoDir); err != nil {
+                freeBlock(f, sb, nuevoBlk)
+                return err
+            }
+
+            if err := writeInode(f, sb, dirInodoIdx, &inodoDir); err != nil {
+                return err
+            }
+        }
+
+        dir, err := ReadDirBlock(f, sb, inodoDir.I_block[i])
+        if err != nil {
+            continue
+        }
+
+        for j := range dir.B_content {
+            if dir.B_content[j].B_inodo == -1 {
+                copy(dir.B_content[j].B_name[:], nombre)
+                dir.B_content[j].B_inodo = childIdx
+                return writeDirBlock(f, sb, inodoDir.I_block[i], &dir)
+            }
+        }
+    }
+
+    return fmt.Errorf("no hay espacio en el directorio")
+}
+
+func agregarEntradaEnDirectorio(f *os.File, sb *structs.SuperBloque, padreIdx, childIdx int32, nombre string) error {
+    inodoPadre, err := ReadInode(f, sb, padreIdx)
+    if err != nil {
+        return err
+    }
+
+    if len(nombre) > 12 {
+        return fmt.Errorf("nombre demasiado largo (máximo 12 caracteres)")
+    }
+
+    for i := 0; i < len(inodoPadre.I_block); i++ {
+        if inodoPadre.I_block[i] == -1 {
+            nuevoBlk, err := allocBlock(f, sb)
+            if err != nil {
+                return fmt.Errorf("no se pudo asignar bloque para directorio: %v", err)
+            }
+
+            var dir structs.BCarpeta
+            for j := range dir.B_content {
+                dir.B_content[j].B_inodo = -1
+            }
+            inodoPadre.I_block[i] = nuevoBlk
+
+            if i == 0 {
+                copy(dir.B_content[0].B_name[:], ".")
+                dir.B_content[0].B_inodo = padreIdx
+                copy(dir.B_content[1].B_name[:], "..")
+                dir.B_content[1].B_inodo = padreIdx
+            }
+
+            if err := writeDirBlock(f, sb, nuevoBlk, &dir); err != nil {
+                freeBlock(f, sb, nuevoBlk)
+                return err
+            }
+
+            if err := writeInode(f, sb, padreIdx, &inodoPadre); err != nil {
+                return err
+            }
+        }
+
+        dir, err := ReadDirBlock(f, sb, inodoPadre.I_block[i])
+        if err != nil {
+            continue
+        }
+
+        for j := range dir.B_content {
+            if dir.B_content[j].B_inodo == -1 {
+                copy(dir.B_content[j].B_name[:], nombre)
+                dir.B_content[j].B_inodo = childIdx
+                return writeDirBlock(f, sb, inodoPadre.I_block[i], &dir)
+            }
+        }
+    }
+
+    return fmt.Errorf("no hay espacio en el directorio padre")
+}
+
+func obtenerNombreDeRuta(ruta string) string {
+    parts := strings.Split(strings.Trim(ruta, "/"), "/")
+    if len(parts) == 0 {
+        return ""
+    }
+    return parts[len(parts)-1]
+}

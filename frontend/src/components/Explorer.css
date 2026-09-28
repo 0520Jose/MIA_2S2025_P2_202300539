@@ -1,0 +1,506 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Tahoma', 'Arial', sans-serif;
+  font-size: 11px;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+}
+
+.ext-explorer-container {
+  min-height: 100vh;
+  background: #008080;
+  background-image: 
+    linear-gradient(45deg, #008080 25%, transparent 25%), 
+    linear-gradient(-45deg, #008080 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, #008080 75%), 
+    linear-gradient(-45deg, transparent 75%, #008080 75%);
+  background-size: 2px 2px;
+  background-position: 0 0, 0 1px, 1px -1px, -1px 0px;
+  padding: 12px;
+}
+
+.ext-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.ext-header,
+.ext-nav-header,
+.ext-explorer-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
+  padding: 8px 12px;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.ext-icon-wrapper,
+.ext-file-icon-wrapper {
+  background: #c0c0c0;
+  width: 32px;
+  height: 32px;
+  border: 2px inset #c0c0c0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ext-main-icon {
+  color: #000080;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ext-title {
+  font-size: 14px;
+  font-weight: bold;
+  color: #000;
+  margin: 0;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-subtitle,
+.ext-page-subtitle {
+  font-size: 11px;
+  color: #000;
+  margin: 2px 0 0;
+}
+
+.ext-button {
+  padding: 6px 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.1s;
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.ext-button-primary {
+  background-color: #c0c0c0;
+  color: #000;
+  border: 2px outset #c0c0c0;
+}
+
+.ext-button-primary:hover {
+  background-color: #dfdfdf;
+}
+
+.ext-button-primary:active {
+  border: 2px inset #c0c0c0;
+  background-color: #a0a0a0;
+}
+
+.ext-button-secondary {
+  background-color: #c0c0c0;
+  color: #000;
+  border: 2px outset #c0c0c0;
+}
+
+.ext-button-secondary:hover {
+  background-color: #dfdfdf;
+}
+
+.ext-button-secondary:active {
+  border: 2px inset #c0c0c0;
+  background-color: #a0a0a0;
+}
+
+.ext-button-full {
+  width: 100%;
+  padding: 8px;
+  margin-top: 12px;
+}
+
+.ext-disk-grid,
+.ext-partition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.ext-disk-card,
+.ext-partition-card {
+  background: #c0c0c0;
+  border: 3px outset #c0c0c0;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  overflow: hidden;
+  transition: all 0.1s;
+}
+
+.ext-disk-card:hover,
+.ext-partition-card:hover {
+  background: #dfdfdf;
+}
+
+.ext-disk-card:active,
+.ext-partition-card:active {
+  border: 3px inset #c0c0c0;
+  background: #a0a0a0;
+}
+
+.ext-card-content {
+  padding: 12px;
+}
+
+.ext-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.ext-disk-icon,
+.ext-partition-icon {
+  width: 32px;
+  height: 32px;
+  background: #c0c0c0;
+  border: 2px inset #c0c0c0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+
+.ext-disk-icon .ext-icon,
+.ext-partition-icon .ext-icon {
+  color: #000080;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ext-disk-name,
+.ext-partition-name {
+  font-size: 12px;
+  font-weight: bold;
+  margin: 0 0 4px;
+  color: #000;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-disk-details,
+.ext-partition-details {
+  font-size: 11px;
+  color: #000;
+  margin: 0 0 6px;
+}
+
+.ext-disk-meta,
+.ext-partition-meta {
+  font-size: 10px;
+  color: #404040;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ext-linux-badge,
+.ext-status-badge {
+  background: #c0c0c0;
+  color: #000;
+  padding: 2px 6px;
+  border: 1px inset #c0c0c0;
+  font-size: 10px;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-status-badge {
+  background: #c0c0c0;
+  color: #800000;
+}
+
+.ext-status-badge.ext-mounted {
+  background: #c0c0c0;
+  color: #008000;
+}
+
+.ext-back-button {
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  color: #000;
+  transition: all 0.1s;
+}
+
+.ext-back-button:hover {
+  background: #dfdfdf;
+}
+
+.ext-back-button:active {
+  border: 2px inset #c0c0c0;
+  background: #a0a0a0;
+}
+
+.ext-back-icon {
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+}
+
+.ext-breadcrumb {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  color: #000;
+  font-size: 11px;
+}
+
+.ext-breadcrumb-item,
+.ext-breadcrumb-current {
+  cursor: pointer;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-breadcrumb-current {
+  color: #000;
+  font-weight: bold;
+}
+
+.ext-breadcrumb-separator {
+  margin: 0 4px;
+  color: #404040;
+}
+
+.ext-file-explorer {
+  margin-top: 16px;
+}
+
+.ext-file-explorer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
+  margin-bottom: 12px;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.ext-partition-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #000;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-home-icon {
+  color: #000080;
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+}
+
+.ext-file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.ext-file-item {
+  background: #c0c0c0;
+  border: 1px outset #c0c0c0;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.1s;
+  box-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+}
+
+.ext-file-item:hover {
+  background: #dfdfdf;
+}
+
+.ext-file-item:active {
+  border: 1px inset #c0c0c0;
+  background: #a0a0a0;
+}
+
+.ext-file-item-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ext-folder-icon {
+  background: #c0c0c0;
+  border: 1px inset #c0c0c0;
+}
+
+.ext-file-icon-item {
+  background: #c0c0c0;
+  border: 1px inset #c0c0c0;
+}
+
+.ext-folder-icon .ext-icon {
+  color: #000080;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ext-file-icon-item .ext-icon {
+  color: #008000;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ext-file-item-name {
+  font-size: 11px;
+  font-weight: bold;
+  margin: 0;
+  color: #000;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-file-item-meta {
+  font-size: 10px;
+  color: #404040;
+  margin: 2px 0 0;
+}
+
+.ext-empty-folder {
+  text-align: center;
+  padding: 32px 16px;
+  color: #404040;
+  background: #c0c0c0;
+  border: 2px inset #c0c0c0;
+  margin: 16px 0;
+}
+
+.ext-empty-folder-icon {
+  margin-bottom: 12px;
+}
+
+.ext-empty-icon {
+  width: 32px;
+  height: 32px;
+  color: #808080;
+  font-size: 32px;
+}
+
+.ext-empty-folder-title {
+  font-size: 12px;
+  color: #404040;
+  margin: 0 0 6px;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-file-container {
+  margin-top: 16px;
+}
+
+.ext-file-card {
+  background: #c0c0c0;
+  border: 3px outset #c0c0c0;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+
+.ext-file-card-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid #808080;
+  background: #c0c0c0;
+}
+
+.ext-file-card-title {
+  margin: 0;
+  font-size: 12px;
+  color: #000;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-file-card-content {
+  padding: 12px;
+}
+
+.ext-file-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #000;
+  line-height: 1.4;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #fff;
+  padding: 8px;
+  border: 2px inset #c0c0c0;
+}
+
+.ext-loading,
+.ext-empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: #404040;
+  font-size: 12px;
+  background: #c0c0c0;
+  border: 2px inset #c0c0c0;
+  margin: 16px 0;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+
+.ext-empty-state {
+  color: #808080;
+}
+
+.ext-nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+.ext-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ext-file-content::-webkit-scrollbar {
+  width: 16px;
+}
+
+.ext-file-content::-webkit-scrollbar-track {
+  background: #c0c0c0;
+  border: 1px inset #c0c0c0;
+}
+
+.ext-file-content::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
+}
+
+.ext-file-content::-webkit-scrollbar-thumb:hover {
+  background: #dfdfdf;
+}
+
+.ext-file-content::-webkit-scrollbar-thumb:active {
+  border: 2px inset #c0c0c0;
+  background: #a0a0a0;
+}
